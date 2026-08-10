@@ -19,6 +19,30 @@ WaferGuard는 반도체 공정의 이상 상황에 대응하는 멀티 에이전
 
 ## 🎯 Demo
 
+### 📡 Chamber Resistance AI
+![USE TIME 기반 챔버 저항 이상탐지 대시보드](docs/assets/chamber-dashboard-preview.png)
+- `USE TIME → 정상 RESISTANCE`를 Gradient Boosting으로 예측하고 실제 측정값의 이탈을 표시합니다.
+- 동일 EQP가 학습·검증에 섞이지 않는 5-fold OOF와 MAD 기반 2단계 판정으로 행 이상과 설비 이상을 구분합니다.
+- 현재 화면은 `sample.csv` 3,000행을 분석한 샘플 결과이며, EQP10·EQP55를 이상 후보로 표시합니다.
+- 샘플 대시보드 데이터는 아래 명령으로 다시 만들 수 있습니다.
+
+```powershell
+python scripts\build_chamber_dashboard_data.py --input "C:\path\to\sample.csv" --output "frontend\src\data\chamberSample.json"
+```
+
+### 🖼️ Wafer Vision AI
+- 기존 `Chamber AI`의 두 번째 탭으로 `wafer_particle` 영상 이상탐지를 병합했습니다. 저항 분석과 기존 검사·MLOps 기능은 그대로 유지됩니다.
+- 통계 방식(픽셀 중앙값·MAD), 정상 전용 AI(ResNet18 + PaDiM-style), 두 방식 비교 모드를 실행 전에 선택할 수 있습니다.
+- 3,000장·100개 챔버 샘플에서 검출된 CH-061·047·007의 최초 이상 시점, 방향, 시계열 점수, 원본·통계·AI 히트맵을 표시합니다.
+- 선택한 챔버의 점수·시점·방향·이상 면적을 `Inspection Agent`에 전달해 기존 RAG·조치 추천 흐름으로 연결합니다.
+- 현재 결과는 고유 정상 1종·불량 3종이 반복된 과제 샘플입니다. 파티클 원인, 실제 팹 성능, 일반화 성능을 의미하지 않습니다.
+
+`wafer_particle` 로컬 분석 API의 비교 결과로 대시보드 JSON과 대표 이미지를 다시 생성할 수 있습니다.
+
+```powershell
+python scripts\build_wafer_vision_dashboard_data.py --base-url http://127.0.0.1:<port> --dataset-id <dataset-id>
+```
+
 ### 🔎 Live Inspection
 ![실시간 검사 콘솔](docs/assets/dashboard.png)
 - Wafer map, Grad-CAM activation과 측정 결과가 스트리밍됩니다.
@@ -153,11 +177,15 @@ app/
   data/                # 평가 fixture, RAG eval set, WM-811K subset
 frontend/
   src/App.jsx          # 운영 대시보드
+  src/ChamberView.jsx  # Resistance AI / Vision AI 통합 탭
+  src/WaferVisionView.jsx # 영상 상태판·시계열·히트맵·Agent 전달
 infra/
   lambda/automation_tick.py  # EventBridge 주기 자동화 Lambda
 scripts/
   smoke_test.py        # 통합 스모크 테스트
   build_wm811k_subset.py  # LSWMD.pkl에서 WM-811K subset 추출
+  build_chamber_dashboard_data.py # 저항 샘플 분석 JSON 생성
+  build_wafer_vision_dashboard_data.py # wafer_particle 결과·히트맵 병합 자산 생성
 docs/                  # AWS 배포·마이그레이션·비용 가이드
 outputs/               # 런타임 산출물 (이미지/DB). gitignore, 기동 시 자동 생성
 ```

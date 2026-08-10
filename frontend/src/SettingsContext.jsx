@@ -79,6 +79,30 @@ export function SettingsProvider({ children }) {
     });
   }, []);
 
+  const ingestVisionFinding = useCallback(async (payload) => {
+    setInFlight(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || "영상 이상 결과를 검사 흐름으로 전달하지 못했습니다.");
+      }
+      const data = await res.json();
+      setLatest(data);
+      setTick(t => t + 1);
+      if (data && (data.risk_level === "High" || data.risk_level === "Medium")) {
+        setRiskQueue(q => (q.some(r => r.id === data.id) ? q : [data, ...q].slice(0, 50)));
+      }
+      return data;
+    } finally {
+      setInFlight(false);
+    }
+  }, []);
+
   const runOnce = useCallback(async () => {
     if (inFlightRef.current) return;
     const s = settingsRef.current;
@@ -157,6 +181,7 @@ export function SettingsProvider({ children }) {
     tick,
     inFlight,
     runOnce,
+    ingestVisionFinding,
     riskQueue,
     setRiskQueue,
   };

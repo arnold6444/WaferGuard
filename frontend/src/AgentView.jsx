@@ -726,18 +726,25 @@ function ActionSelector({ actions, decided, busy, onExecute, onEvidence, reviewR
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {actions.map((a, i) => (
-          <button key={i} onClick={() => setSel(i)} className="focusable"
+          <div key={i}
             style={{
-              display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-              padding: "7px 9px", borderRadius: 7, cursor: "pointer", font: "inherit",
+              display: "flex", alignItems: "center", gap: 4, width: "100%",
+              padding: "4px 5px 4px 0", borderRadius: 7,
               border: `1px solid ${sel === i ? "var(--accent-line)" : "var(--border-soft)"}`,
               background: sel === i ? "var(--accent-dim)" : "var(--panel-2)",
             }}>
-            <RadioDot on={sel === i} />
-            {i === 0 && <span className="chip" style={{ fontSize: 8.5, color: "var(--accent)", borderColor: "var(--accent-line)", flex: "none" }}>권장</span>}
-            <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "var(--text)", lineHeight: 1.45 }}>{a.label}</span>
+            <button type="button" onClick={() => setSel(i)} className="focusable"
+              style={{
+                display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, textAlign: "left",
+                padding: "3px 4px 3px 9px", cursor: "pointer", font: "inherit",
+                border: 0, background: "transparent",
+              }}>
+              <RadioDot on={sel === i} />
+              {i === 0 && <span className="chip" style={{ fontSize: 8.5, color: "var(--accent)", borderColor: "var(--accent-line)", flex: "none" }}>권장</span>}
+              <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "var(--text)", lineHeight: 1.45 }}>{a.label}</span>
+            </button>
             <EvidenceTrigger source={a.source} onOpen={() => onEvidence({ kind: "action", label: a.label, source: a.source })} />
-          </button>
+          </div>
         ))}
         <button onClick={() => setSel("custom")} className="focusable"
           style={{

@@ -1,0 +1,4237 @@
+{
+  "source": {
+    "label": "sample.csv",
+    "period": "2025-11-01 ~ 2025-11-30",
+    "rows": 3000,
+    "equipment": 100,
+    "days": 30,
+    "useTimeMin": 20,
+    "useTimeMax": 1000,
+    "resistanceMean": 88.79,
+    "resistanceStd": 3.88
+  },
+  "model": {
+    "name": "Gradient Boosting Regressor",
+    "validation": "EQP-grouped 5-fold OOF",
+    "mae": 0.527,
+    "rmse": 0.618,
+    "normalMae": 0.519,
+    "folds": [
+      {
+        "fold": 1,
+        "mae": 0.526,
+        "rmse": 0.608
+      },
+      {
+        "fold": 2,
+        "mae": 0.515,
+        "rmse": 0.598
+      },
+      {
+        "fold": 3,
+        "mae": 0.507,
+        "rmse": 0.582
+      },
+      {
+        "fold": 4,
+        "mae": 0.513,
+        "rmse": 0.591
+      },
+      {
+        "fold": 5,
+        "mae": 0.574,
+        "rmse": 0.7
+      }
+    ],
+    "normalFolds": [
+      {
+        "fold": 1,
+        "mae": 0.522,
+        "rmse": 0.605
+      },
+      {
+        "fold": 2,
+        "mae": 0.51,
+        "rmse": 0.588
+      },
+      {
+        "fold": 3,
+        "mae": 0.513,
+        "rmse": 0.591
+      },
+      {
+        "fold": 4,
+        "mae": 0.521,
+        "rmse": 0.601
+      },
+      {
+        "fold": 5,
+        "mae": 0.529,
+        "rmse": 0.609
+      }
+    ]
+  },
+  "thresholds": {
+    "madK": 3.0,
+    "rowAlpha": 0.01,
+    "rowError": 1.097,
+    "medianError": 0.77,
+    "q95Error": 1.163
+  },
+  "summary": {
+    "anomalyEquipment": 2,
+    "normalEquipment": 98,
+    "flaggedRows": 48,
+    "flaggedRate": 1.6,
+    "stage1Candidates": [
+      "eqp10",
+      "eqp55"
+    ]
+  },
+  "pattern": [
+    {
+      "useTime": 30,
+      "median": 94.6,
+      "q25": 94.2,
+      "q75": 95.2,
+      "iqr": 1.0,
+      "expected": 94.68
+    },
+    {
+      "useTime": 70,
+      "median": 94.05,
+      "q25": 93.7,
+      "q75": 94.67,
+      "iqr": 0.97,
+      "expected": 94.29
+    },
+    {
+      "useTime": 110,
+      "median": 93.8,
+      "q25": 93.2,
+      "q75": 94.2,
+      "iqr": 1.0,
+      "expected": 93.84
+    },
+    {
+      "useTime": 160,
+      "median": 93.2,
+      "q25": 92.8,
+      "q75": 93.7,
+      "iqr": 0.9,
+      "expected": 93.25
+    },
+    {
+      "useTime": 190,
+      "median": 92.8,
+      "q25": 92.2,
+      "q75": 93.2,
+      "iqr": 1.0,
+      "expected": 92.9
+    },
+    {
+      "useTime": 230,
+      "median": 92.6,
+      "q25": 92.1,
+      "q75": 93.0,
+      "iqr": 0.9,
+      "expected": 92.52
+    },
+    {
+      "useTime": 270,
+      "median": 91.9,
+      "q25": 91.4,
+      "q75": 92.5,
+      "iqr": 1.1,
+      "expected": 91.95
+    },
+    {
+      "useTime": 320,
+      "median": 91.6,
+      "q25": 91.12,
+      "q75": 92.1,
+      "iqr": 0.97,
+      "expected": 91.62
+    },
+    {
+      "useTime": 360,
+      "median": 90.9,
+      "q25": 90.4,
+      "q75": 91.43,
+      "iqr": 1.03,
+      "expected": 91.01
+    },
+    {
+      "useTime": 395,
+      "median": 90.6,
+      "q25": 90.1,
+      "q75": 91.07,
+      "iqr": 0.97,
+      "expected": 90.64
+    },
+    {
+      "useTime": 440,
+      "median": 90.2,
+      "q25": 89.6,
+      "q75": 90.7,
+      "iqr": 1.1,
+      "expected": 90.17
+    },
+    {
+      "useTime": 480,
+      "median": 89.6,
+      "q25": 89.3,
+      "q75": 90.2,
+      "iqr": 0.9,
+      "expected": 89.57
+    },
+    {
+      "useTime": 510,
+      "median": 89.4,
+      "q25": 88.8,
+      "q75": 89.8,
+      "iqr": 1.0,
+      "expected": 89.45
+    },
+    {
+      "useTime": 545,
+      "median": 89.0,
+      "q25": 88.5,
+      "q75": 89.5,
+      "iqr": 1.0,
+      "expected": 88.97
+    },
+    {
+      "useTime": 590,
+      "median": 88.6,
+      "q25": 88.0,
+      "q75": 89.0,
+      "iqr": 1.0,
+      "expected": 88.48
+    },
+    {
+      "useTime": 620,
+      "median": 88.0,
+      "q25": 87.5,
+      "q75": 88.6,
+      "iqr": 1.1,
+      "expected": 88.05
+    },
+    {
+      "useTime": 670,
+      "median": 87.7,
+      "q25": 87.1,
+      "q75": 88.2,
+      "iqr": 1.1,
+      "expected": 87.66
+    },
+    {
+      "useTime": 700,
+      "median": 87.1,
+      "q25": 86.65,
+      "q75": 87.65,
+      "iqr": 1.0,
+      "expected": 87.16
+    },
+    {
+      "useTime": 750,
+      "median": 86.75,
+      "q25": 86.2,
+      "q75": 87.2,
+      "iqr": 1.0,
+      "expected": 86.74
+    },
+    {
+      "useTime": 790,
+      "median": 86.0,
+      "q25": 85.62,
+      "q75": 86.7,
+      "iqr": 1.08,
+      "expected": 86.09
+    },
+    {
+      "useTime": 820,
+      "median": 85.8,
+      "q25": 85.4,
+      "q75": 86.4,
+      "iqr": 1.0,
+      "expected": 85.83
+    },
+    {
+      "useTime": 870,
+      "median": 85.3,
+      "q25": 84.8,
+      "q75": 85.9,
+      "iqr": 1.1,
+      "expected": 85.19
+    },
+    {
+      "useTime": 900,
+      "median": 84.6,
+      "q25": 84.1,
+      "q75": 85.2,
+      "iqr": 1.1,
+      "expected": 84.98
+    },
+    {
+      "useTime": 940,
+      "median": 82.7,
+      "q25": 82.0,
+      "q75": 83.2,
+      "iqr": 1.2,
+      "expected": 82.88
+    },
+    {
+      "useTime": 990,
+      "median": 80.5,
+      "q25": 79.8,
+      "q75": 81.2,
+      "iqr": 1.4,
+      "expected": 80.58
+    }
+  ],
+  "anomalyMap": [
+    {
+      "eqp": "eqp10",
+      "medianError": 0.506,
+      "q95Error": 2.657,
+      "score": 26.03,
+      "anomaly": true,
+      "anomalyRows": 7,
+      "consecutive": 6
+    },
+    {
+      "eqp": "eqp55",
+      "medianError": 0.848,
+      "q95Error": 2.517,
+      "score": 23.87,
+      "anomaly": true,
+      "anomalyRows": 11,
+      "consecutive": 8
+    },
+    {
+      "eqp": "eqp53",
+      "medianError": 0.719,
+      "q95Error": 0.956,
+      "score": 2.36,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp52",
+      "medianError": 0.622,
+      "q95Error": 1.085,
+      "score": 1.8,
+      "anomaly": false,
+      "anomalyRows": 2,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp75",
+      "medianError": 0.508,
+      "q95Error": 1.072,
+      "score": 1.61,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp2",
+      "medianError": 0.566,
+      "q95Error": 1.069,
+      "score": 1.55,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp88",
+      "medianError": 0.652,
+      "q95Error": 1.068,
+      "score": 1.53,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp16",
+      "medianError": 0.649,
+      "q95Error": 0.943,
+      "score": 1.49,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp77",
+      "medianError": 0.54,
+      "q95Error": 1.062,
+      "score": 1.44,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp46",
+      "medianError": 0.641,
+      "q95Error": 1.042,
+      "score": 1.38,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp44",
+      "medianError": 0.546,
+      "q95Error": 1.057,
+      "score": 1.37,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp96",
+      "medianError": 0.553,
+      "q95Error": 1.057,
+      "score": 1.37,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp29",
+      "medianError": 0.555,
+      "q95Error": 1.051,
+      "score": 1.28,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp70",
+      "medianError": 0.475,
+      "q95Error": 1.049,
+      "score": 1.25,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp63",
+      "medianError": 0.555,
+      "q95Error": 1.045,
+      "score": 1.19,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp1",
+      "medianError": 0.623,
+      "q95Error": 0.96,
+      "score": 1.16,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp22",
+      "medianError": 0.619,
+      "q95Error": 0.981,
+      "score": 1.11,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp65",
+      "medianError": 0.536,
+      "q95Error": 1.039,
+      "score": 1.1,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp92",
+      "medianError": 0.537,
+      "q95Error": 1.035,
+      "score": 1.03,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp100",
+      "medianError": 0.608,
+      "q95Error": 1.01,
+      "score": 0.98,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp48",
+      "medianError": 0.608,
+      "q95Error": 0.926,
+      "score": 0.96,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp3",
+      "medianError": 0.442,
+      "q95Error": 1.03,
+      "score": 0.96,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp51",
+      "medianError": 0.607,
+      "q95Error": 0.979,
+      "score": 0.95,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp94",
+      "medianError": 0.606,
+      "q95Error": 0.927,
+      "score": 0.94,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp76",
+      "medianError": 0.603,
+      "q95Error": 0.973,
+      "score": 0.91,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp36",
+      "medianError": 0.478,
+      "q95Error": 1.026,
+      "score": 0.9,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp30",
+      "medianError": 0.492,
+      "q95Error": 1.026,
+      "score": 0.89,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp91",
+      "medianError": 0.602,
+      "q95Error": 0.957,
+      "score": 0.89,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp40",
+      "medianError": 0.6,
+      "q95Error": 0.985,
+      "score": 0.88,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp97",
+      "medianError": 0.469,
+      "q95Error": 1.024,
+      "score": 0.86,
+      "anomaly": false,
+      "anomalyRows": 2,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp68",
+      "medianError": 0.6,
+      "q95Error": 0.945,
+      "score": 0.86,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp83",
+      "medianError": 0.554,
+      "q95Error": 1.024,
+      "score": 0.86,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp62",
+      "medianError": 0.598,
+      "q95Error": 0.966,
+      "score": 0.85,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp56",
+      "medianError": 0.539,
+      "q95Error": 1.022,
+      "score": 0.84,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp66",
+      "medianError": 0.373,
+      "q95Error": 1.021,
+      "score": 0.81,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp64",
+      "medianError": 0.533,
+      "q95Error": 1.021,
+      "score": 0.81,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp27",
+      "medianError": 0.465,
+      "q95Error": 1.019,
+      "score": 0.79,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp12",
+      "medianError": 0.593,
+      "q95Error": 0.93,
+      "score": 0.79,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp73",
+      "medianError": 0.593,
+      "q95Error": 0.973,
+      "score": 0.78,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp80",
+      "medianError": 0.593,
+      "q95Error": 0.985,
+      "score": 0.78,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp34",
+      "medianError": 0.593,
+      "q95Error": 0.945,
+      "score": 0.78,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp11",
+      "medianError": 0.588,
+      "q95Error": 0.856,
+      "score": 0.73,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp86",
+      "medianError": 0.505,
+      "q95Error": 1.015,
+      "score": 0.72,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp89",
+      "medianError": 0.584,
+      "q95Error": 0.97,
+      "score": 0.67,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp60",
+      "medianError": 0.466,
+      "q95Error": 1.012,
+      "score": 0.67,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp85",
+      "medianError": 0.579,
+      "q95Error": 0.977,
+      "score": 0.6,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp90",
+      "medianError": 0.528,
+      "q95Error": 1.006,
+      "score": 0.59,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp20",
+      "medianError": 0.571,
+      "q95Error": 1.006,
+      "score": 0.59,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp72",
+      "medianError": 0.575,
+      "q95Error": 1.002,
+      "score": 0.56,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp69",
+      "medianError": 0.574,
+      "q95Error": 0.863,
+      "score": 0.55,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp87",
+      "medianError": 0.574,
+      "q95Error": 0.959,
+      "score": 0.55,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp28",
+      "medianError": 0.574,
+      "q95Error": 0.965,
+      "score": 0.54,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp79",
+      "medianError": 0.499,
+      "q95Error": 1.002,
+      "score": 0.53,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp25",
+      "medianError": 0.571,
+      "q95Error": 0.955,
+      "score": 0.51,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp95",
+      "medianError": 0.568,
+      "q95Error": 0.973,
+      "score": 0.47,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp13",
+      "medianError": 0.505,
+      "q95Error": 0.995,
+      "score": 0.42,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp49",
+      "medianError": 0.399,
+      "q95Error": 0.995,
+      "score": 0.41,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp81",
+      "medianError": 0.561,
+      "q95Error": 0.924,
+      "score": 0.39,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp58",
+      "medianError": 0.559,
+      "q95Error": 0.928,
+      "score": 0.36,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp26",
+      "medianError": 0.557,
+      "q95Error": 0.97,
+      "score": 0.33,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp18",
+      "medianError": 0.552,
+      "q95Error": 0.883,
+      "score": 0.27,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp39",
+      "medianError": 0.552,
+      "q95Error": 0.923,
+      "score": 0.27,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp67",
+      "medianError": 0.53,
+      "q95Error": 0.979,
+      "score": 0.17,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp9",
+      "medianError": 0.487,
+      "q95Error": 0.978,
+      "score": 0.15,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp78",
+      "medianError": 0.44,
+      "q95Error": 0.977,
+      "score": 0.14,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp7",
+      "medianError": 0.427,
+      "q95Error": 0.976,
+      "score": 0.12,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp71",
+      "medianError": 0.479,
+      "q95Error": 0.973,
+      "score": 0.08,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp84",
+      "medianError": 0.537,
+      "q95Error": 0.82,
+      "score": 0.08,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp37",
+      "medianError": 0.51,
+      "q95Error": 0.972,
+      "score": 0.05,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp17",
+      "medianError": 0.509,
+      "q95Error": 0.971,
+      "score": 0.04,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp21",
+      "medianError": 0.533,
+      "q95Error": 0.97,
+      "score": 0.03,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp93",
+      "medianError": 0.531,
+      "q95Error": 0.955,
+      "score": 0.01,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp14",
+      "medianError": 0.53,
+      "q95Error": 0.855,
+      "score": -0.01,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp33",
+      "medianError": 0.522,
+      "q95Error": 0.966,
+      "score": -0.02,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp35",
+      "medianError": 0.471,
+      "q95Error": 0.964,
+      "score": -0.06,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp57",
+      "medianError": 0.373,
+      "q95Error": 0.96,
+      "score": -0.12,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp47",
+      "medianError": 0.518,
+      "q95Error": 0.876,
+      "score": -0.16,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp32",
+      "medianError": 0.437,
+      "q95Error": 0.957,
+      "score": -0.17,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp4",
+      "medianError": 0.513,
+      "q95Error": 0.799,
+      "score": -0.22,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp59",
+      "medianError": 0.51,
+      "q95Error": 0.902,
+      "score": -0.26,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp45",
+      "medianError": 0.506,
+      "q95Error": 0.878,
+      "score": -0.31,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp74",
+      "medianError": 0.323,
+      "q95Error": 0.947,
+      "score": -0.33,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp5",
+      "medianError": 0.485,
+      "q95Error": 0.942,
+      "score": -0.4,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp8",
+      "medianError": 0.397,
+      "q95Error": 0.936,
+      "score": -0.5,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp15",
+      "medianError": 0.486,
+      "q95Error": 0.897,
+      "score": -0.55,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp6",
+      "medianError": 0.484,
+      "q95Error": 0.863,
+      "score": -0.58,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp50",
+      "medianError": 0.464,
+      "q95Error": 0.927,
+      "score": -0.63,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp19",
+      "medianError": 0.477,
+      "q95Error": 0.896,
+      "score": -0.67,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp61",
+      "medianError": 0.416,
+      "q95Error": 0.921,
+      "score": -0.72,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp42",
+      "medianError": 0.47,
+      "q95Error": 0.817,
+      "score": -0.76,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp24",
+      "medianError": 0.467,
+      "q95Error": 0.9,
+      "score": -0.8,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp43",
+      "medianError": 0.453,
+      "q95Error": 0.914,
+      "score": -0.83,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp41",
+      "medianError": 0.458,
+      "q95Error": 0.908,
+      "score": -0.9,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp38",
+      "medianError": 0.457,
+      "q95Error": 0.873,
+      "score": -0.92,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp54",
+      "medianError": 0.408,
+      "q95Error": 0.906,
+      "score": -0.96,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp98",
+      "medianError": 0.452,
+      "q95Error": 0.88,
+      "score": -0.98,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp82",
+      "medianError": 0.443,
+      "q95Error": 0.816,
+      "score": -1.09,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp31",
+      "medianError": 0.418,
+      "q95Error": 0.831,
+      "score": -1.42,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp99",
+      "medianError": 0.391,
+      "q95Error": 0.793,
+      "score": -1.75,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp23",
+      "medianError": 0.286,
+      "q95Error": 0.79,
+      "score": -2.74,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    }
+  ],
+  "topEquipment": [
+    {
+      "eqp": "eqp10",
+      "medianError": 0.506,
+      "q95Error": 2.657,
+      "score": 26.03,
+      "anomaly": true,
+      "anomalyRows": 7,
+      "consecutive": 6
+    },
+    {
+      "eqp": "eqp55",
+      "medianError": 0.848,
+      "q95Error": 2.517,
+      "score": 23.87,
+      "anomaly": true,
+      "anomalyRows": 11,
+      "consecutive": 8
+    },
+    {
+      "eqp": "eqp53",
+      "medianError": 0.719,
+      "q95Error": 0.956,
+      "score": 2.36,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp52",
+      "medianError": 0.622,
+      "q95Error": 1.085,
+      "score": 1.8,
+      "anomaly": false,
+      "anomalyRows": 2,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp75",
+      "medianError": 0.508,
+      "q95Error": 1.072,
+      "score": 1.61,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp2",
+      "medianError": 0.566,
+      "q95Error": 1.069,
+      "score": 1.55,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp88",
+      "medianError": 0.652,
+      "q95Error": 1.068,
+      "score": 1.53,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp16",
+      "medianError": 0.649,
+      "q95Error": 0.943,
+      "score": 1.49,
+      "anomaly": false,
+      "anomalyRows": 0,
+      "consecutive": 0
+    },
+    {
+      "eqp": "eqp77",
+      "medianError": 0.54,
+      "q95Error": 1.062,
+      "score": 1.44,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp46",
+      "medianError": 0.641,
+      "q95Error": 1.042,
+      "score": 1.38,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp44",
+      "medianError": 0.546,
+      "q95Error": 1.057,
+      "score": 1.37,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    },
+    {
+      "eqp": "eqp96",
+      "medianError": 0.553,
+      "q95Error": 1.057,
+      "score": 1.37,
+      "anomaly": false,
+      "anomalyRows": 1,
+      "consecutive": 1
+    }
+  ],
+  "series": {
+    "eqp2": [
+      {
+        "date": "11-01",
+        "useTime": 600,
+        "actual": 87.6,
+        "expected": 88.41,
+        "error": 0.81,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 620,
+        "actual": 88.1,
+        "expected": 88.2,
+        "error": 0.1,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 640,
+        "actual": 87.3,
+        "expected": 87.81,
+        "error": 0.51,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 660,
+        "actual": 86.7,
+        "expected": 87.76,
+        "error": 1.06,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 670,
+        "actual": 88.2,
+        "expected": 87.61,
+        "error": 0.59,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 690,
+        "actual": 88.2,
+        "expected": 87.36,
+        "error": 0.84,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 720,
+        "actual": 86.4,
+        "expected": 86.89,
+        "error": 0.49,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 730,
+        "actual": 87.4,
+        "expected": 86.86,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 750,
+        "actual": 86.8,
+        "expected": 86.77,
+        "error": 0.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 780,
+        "actual": 85.9,
+        "expected": 86.26,
+        "error": 0.36,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 800,
+        "actual": 85.1,
+        "expected": 85.95,
+        "error": 0.85,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 820,
+        "actual": 85.4,
+        "expected": 85.86,
+        "error": 0.46,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 840,
+        "actual": 84.8,
+        "expected": 85.88,
+        "error": 1.08,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 860,
+        "actual": 85.7,
+        "expected": 85.44,
+        "error": 0.26,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 870,
+        "actual": 84.4,
+        "expected": 85.16,
+        "error": 0.76,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 890,
+        "actual": 84.4,
+        "expected": 85.09,
+        "error": 0.69,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 910,
+        "actual": 83.5,
+        "expected": 84.63,
+        "error": 1.13,
+        "anomaly": true
+      },
+      {
+        "date": "11-18",
+        "useTime": 930,
+        "actual": 83.3,
+        "expected": 83.27,
+        "error": 0.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 950,
+        "actual": 83.4,
+        "expected": 82.57,
+        "error": 0.83,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 960,
+        "actual": 82.2,
+        "expected": 81.72,
+        "error": 0.48,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 980,
+        "actual": 80.9,
+        "expected": 80.94,
+        "error": 0.04,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 1000,
+        "actual": 79.7,
+        "expected": 79.96,
+        "error": 0.26,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 20,
+        "actual": 93.9,
+        "expected": 94.77,
+        "error": 0.87,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 40,
+        "actual": 95.4,
+        "expected": 94.55,
+        "error": 0.85,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 60,
+        "actual": 94.2,
+        "expected": 94.33,
+        "error": 0.13,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 80,
+        "actual": 94.7,
+        "expected": 94.0,
+        "error": 0.7,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 100,
+        "actual": 93.3,
+        "expected": 93.81,
+        "error": 0.51,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 120,
+        "actual": 94.6,
+        "expected": 93.8,
+        "error": 0.8,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 130,
+        "actual": 93.1,
+        "expected": 93.58,
+        "error": 0.48,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 150,
+        "actual": 92.4,
+        "expected": 93.26,
+        "error": 0.86,
+        "anomaly": false
+      }
+    ],
+    "eqp44": [
+      {
+        "date": "11-01",
+        "useTime": 850,
+        "actual": 86.4,
+        "expected": 85.46,
+        "error": 0.94,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 870,
+        "actual": 85.4,
+        "expected": 85.19,
+        "error": 0.21,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 890,
+        "actual": 84.4,
+        "expected": 85.13,
+        "error": 0.73,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 910,
+        "actual": 84.9,
+        "expected": 84.5,
+        "error": 0.4,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 920,
+        "actual": 84.2,
+        "expected": 84.06,
+        "error": 0.14,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 940,
+        "actual": 83.9,
+        "expected": 82.87,
+        "error": 1.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 960,
+        "actual": 81.2,
+        "expected": 81.74,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 980,
+        "actual": 80.9,
+        "expected": 80.85,
+        "error": 0.05,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 1000,
+        "actual": 79.5,
+        "expected": 79.85,
+        "error": 0.35,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 20,
+        "actual": 95.3,
+        "expected": 94.74,
+        "error": 0.56,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 40,
+        "actual": 93.6,
+        "expected": 94.76,
+        "error": 1.16,
+        "anomaly": true
+      },
+      {
+        "date": "11-12",
+        "useTime": 50,
+        "actual": 95.2,
+        "expected": 94.45,
+        "error": 0.75,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 70,
+        "actual": 93.8,
+        "expected": 94.26,
+        "error": 0.46,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 90,
+        "actual": 94.0,
+        "expected": 93.98,
+        "error": 0.02,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 120,
+        "actual": 94.2,
+        "expected": 93.9,
+        "error": 0.3,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 130,
+        "actual": 93.2,
+        "expected": 93.5,
+        "error": 0.3,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 150,
+        "actual": 92.9,
+        "expected": 93.3,
+        "error": 0.4,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 170,
+        "actual": 92.5,
+        "expected": 93.2,
+        "error": 0.7,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 190,
+        "actual": 92.8,
+        "expected": 92.87,
+        "error": 0.07,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 210,
+        "actual": 91.7,
+        "expected": 92.68,
+        "error": 0.98,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 230,
+        "actual": 92.4,
+        "expected": 92.47,
+        "error": 0.07,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 250,
+        "actual": 91.6,
+        "expected": 92.45,
+        "error": 0.85,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 260,
+        "actual": 91.2,
+        "expected": 92.16,
+        "error": 0.96,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 280,
+        "actual": 92.3,
+        "expected": 91.99,
+        "error": 0.31,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 310,
+        "actual": 92.5,
+        "expected": 91.55,
+        "error": 0.95,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 330,
+        "actual": 91.5,
+        "expected": 91.34,
+        "error": 0.16,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 350,
+        "actual": 91.7,
+        "expected": 91.03,
+        "error": 0.67,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 370,
+        "actual": 89.9,
+        "expected": 90.82,
+        "error": 0.92,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 380,
+        "actual": 91.7,
+        "expected": 90.62,
+        "error": 1.08,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 400,
+        "actual": 90.0,
+        "expected": 90.63,
+        "error": 0.63,
+        "anomaly": false
+      }
+    ],
+    "eqp77": [
+      {
+        "date": "11-01",
+        "useTime": 320,
+        "actual": 92.2,
+        "expected": 91.64,
+        "error": 0.56,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 340,
+        "actual": 92.1,
+        "expected": 90.96,
+        "error": 1.14,
+        "anomaly": true
+      },
+      {
+        "date": "11-03",
+        "useTime": 360,
+        "actual": 91.9,
+        "expected": 90.96,
+        "error": 0.94,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 380,
+        "actual": 91.0,
+        "expected": 90.7,
+        "error": 0.3,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 400,
+        "actual": 90.8,
+        "expected": 90.62,
+        "error": 0.18,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 420,
+        "actual": 89.5,
+        "expected": 90.34,
+        "error": 0.84,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 440,
+        "actual": 89.3,
+        "expected": 90.22,
+        "error": 0.92,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 450,
+        "actual": 89.3,
+        "expected": 90.16,
+        "error": 0.86,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 470,
+        "actual": 89.3,
+        "expected": 89.78,
+        "error": 0.48,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 490,
+        "actual": 89.4,
+        "expected": 89.51,
+        "error": 0.11,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 510,
+        "actual": 88.9,
+        "expected": 89.42,
+        "error": 0.52,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 530,
+        "actual": 89.8,
+        "expected": 89.04,
+        "error": 0.76,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 550,
+        "actual": 89.3,
+        "expected": 88.99,
+        "error": 0.31,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 570,
+        "actual": 88.7,
+        "expected": 88.67,
+        "error": 0.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 590,
+        "actual": 89.2,
+        "expected": 88.47,
+        "error": 0.73,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 610,
+        "actual": 89.1,
+        "expected": 88.35,
+        "error": 0.75,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 640,
+        "actual": 87.7,
+        "expected": 87.86,
+        "error": 0.16,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 650,
+        "actual": 87.5,
+        "expected": 87.86,
+        "error": 0.36,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 670,
+        "actual": 86.6,
+        "expected": 87.67,
+        "error": 1.07,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 690,
+        "actual": 86.4,
+        "expected": 87.44,
+        "error": 1.04,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 710,
+        "actual": 86.9,
+        "expected": 87.14,
+        "error": 0.24,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 730,
+        "actual": 86.7,
+        "expected": 86.87,
+        "error": 0.17,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 750,
+        "actual": 86.9,
+        "expected": 86.73,
+        "error": 0.17,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 770,
+        "actual": 85.9,
+        "expected": 86.46,
+        "error": 0.56,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 790,
+        "actual": 87.2,
+        "expected": 86.15,
+        "error": 1.05,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 810,
+        "actual": 86.4,
+        "expected": 85.83,
+        "error": 0.57,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 820,
+        "actual": 85.4,
+        "expected": 85.83,
+        "error": 0.43,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 840,
+        "actual": 84.9,
+        "expected": 85.83,
+        "error": 0.93,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 860,
+        "actual": 85.3,
+        "expected": 85.62,
+        "error": 0.32,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 880,
+        "actual": 84.9,
+        "expected": 85.21,
+        "error": 0.31,
+        "anomaly": false
+      }
+    ],
+    "eqp75": [
+      {
+        "date": "11-01",
+        "useTime": 910,
+        "actual": 83.6,
+        "expected": 84.64,
+        "error": 1.04,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 930,
+        "actual": 82.9,
+        "expected": 83.4,
+        "error": 0.5,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 950,
+        "actual": 83.0,
+        "expected": 82.66,
+        "error": 0.34,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 970,
+        "actual": 81.9,
+        "expected": 81.77,
+        "error": 0.13,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 990,
+        "actual": 79.6,
+        "expected": 80.62,
+        "error": 1.02,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 1000,
+        "actual": 81.0,
+        "expected": 79.91,
+        "error": 1.09,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 20,
+        "actual": 94.0,
+        "expected": 94.8,
+        "error": 0.8,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 40,
+        "actual": 95.0,
+        "expected": 94.68,
+        "error": 0.32,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 60,
+        "actual": 95.0,
+        "expected": 94.32,
+        "error": 0.68,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 80,
+        "actual": 94.9,
+        "expected": 94.01,
+        "error": 0.89,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 100,
+        "actual": 93.2,
+        "expected": 93.71,
+        "error": 0.51,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 130,
+        "actual": 93.1,
+        "expected": 93.64,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 140,
+        "actual": 94.0,
+        "expected": 93.22,
+        "error": 0.78,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 160,
+        "actual": 92.3,
+        "expected": 93.23,
+        "error": 0.93,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 180,
+        "actual": 92.6,
+        "expected": 92.89,
+        "error": 0.29,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 200,
+        "actual": 92.4,
+        "expected": 92.61,
+        "error": 0.21,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 220,
+        "actual": 93.3,
+        "expected": 92.62,
+        "error": 0.68,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 240,
+        "actual": 91.4,
+        "expected": 92.64,
+        "error": 1.24,
+        "anomaly": true
+      },
+      {
+        "date": "11-19",
+        "useTime": 270,
+        "actual": 91.5,
+        "expected": 91.95,
+        "error": 0.45,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 290,
+        "actual": 91.8,
+        "expected": 91.8,
+        "error": 0.0,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 310,
+        "actual": 90.8,
+        "expected": 91.68,
+        "error": 0.88,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 330,
+        "actual": 91.4,
+        "expected": 91.41,
+        "error": 0.01,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 360,
+        "actual": 90.3,
+        "expected": 91.07,
+        "error": 0.77,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 380,
+        "actual": 90.9,
+        "expected": 90.61,
+        "error": 0.29,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 400,
+        "actual": 90.7,
+        "expected": 90.57,
+        "error": 0.13,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 420,
+        "actual": 90.6,
+        "expected": 90.2,
+        "error": 0.4,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 430,
+        "actual": 90.3,
+        "expected": 90.21,
+        "error": 0.09,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 450,
+        "actual": 90.4,
+        "expected": 90.17,
+        "error": 0.23,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 480,
+        "actual": 89.7,
+        "expected": 89.49,
+        "error": 0.21,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 490,
+        "actual": 90.1,
+        "expected": 89.45,
+        "error": 0.65,
+        "anomaly": false
+      }
+    ],
+    "eqp10": [
+      {
+        "date": "11-01",
+        "useTime": 500,
+        "actual": 89.9,
+        "expected": 89.45,
+        "error": 0.45,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 520,
+        "actual": 88.7,
+        "expected": 89.02,
+        "error": 0.32,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 540,
+        "actual": 90.0,
+        "expected": 88.97,
+        "error": 1.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 550,
+        "actual": 89.2,
+        "expected": 88.97,
+        "error": 0.23,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 570,
+        "actual": 89.2,
+        "expected": 88.68,
+        "error": 0.52,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 590,
+        "actual": 88.8,
+        "expected": 88.48,
+        "error": 0.32,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 610,
+        "actual": 89.2,
+        "expected": 88.35,
+        "error": 0.85,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 630,
+        "actual": 87.7,
+        "expected": 88.05,
+        "error": 0.35,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 660,
+        "actual": 88.2,
+        "expected": 87.72,
+        "error": 0.48,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 680,
+        "actual": 87.7,
+        "expected": 87.47,
+        "error": 0.23,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 700,
+        "actual": 87.9,
+        "expected": 87.16,
+        "error": 0.74,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 710,
+        "actual": 86.3,
+        "expected": 87.11,
+        "error": 0.81,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 740,
+        "actual": 86.3,
+        "expected": 86.75,
+        "error": 0.45,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 760,
+        "actual": 86.2,
+        "expected": 86.54,
+        "error": 0.34,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 780,
+        "actual": 84.9,
+        "expected": 86.28,
+        "error": 1.38,
+        "anomaly": true
+      },
+      {
+        "date": "11-16",
+        "useTime": 800,
+        "actual": 85.6,
+        "expected": 85.88,
+        "error": 0.28,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 820,
+        "actual": 84.8,
+        "expected": 85.83,
+        "error": 1.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 840,
+        "actual": 84.7,
+        "expected": 85.83,
+        "error": 1.13,
+        "anomaly": true
+      },
+      {
+        "date": "11-19",
+        "useTime": 850,
+        "actual": 82.7,
+        "expected": 85.59,
+        "error": 2.89,
+        "anomaly": true
+      },
+      {
+        "date": "11-20",
+        "useTime": 880,
+        "actual": 83.6,
+        "expected": 85.19,
+        "error": 1.59,
+        "anomaly": true
+      },
+      {
+        "date": "11-21",
+        "useTime": 900,
+        "actual": 82.8,
+        "expected": 84.98,
+        "error": 2.18,
+        "anomaly": true
+      },
+      {
+        "date": "11-22",
+        "useTime": 920,
+        "actual": 81.0,
+        "expected": 84.01,
+        "error": 3.01,
+        "anomaly": true
+      },
+      {
+        "date": "11-23",
+        "useTime": 940,
+        "actual": 80.5,
+        "expected": 82.88,
+        "error": 2.38,
+        "anomaly": true
+      },
+      {
+        "date": "11-24",
+        "useTime": 960,
+        "actual": 81.2,
+        "expected": 81.76,
+        "error": 0.56,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 980,
+        "actual": 80.8,
+        "expected": 80.91,
+        "error": 0.11,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 1000,
+        "actual": 80.4,
+        "expected": 79.89,
+        "error": 0.51,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 1000,
+        "actual": 80.4,
+        "expected": 79.89,
+        "error": 0.51,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 20,
+        "actual": 95.2,
+        "expected": 94.74,
+        "error": 0.46,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 40,
+        "actual": 94.3,
+        "expected": 94.68,
+        "error": 0.38,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 60,
+        "actual": 94.1,
+        "expected": 94.29,
+        "error": 0.19,
+        "anomaly": false
+      }
+    ],
+    "eqp16": [
+      {
+        "date": "11-01",
+        "useTime": 840,
+        "actual": 85.6,
+        "expected": 85.85,
+        "error": 0.25,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 860,
+        "actual": 84.6,
+        "expected": 85.44,
+        "error": 0.84,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 880,
+        "actual": 85.7,
+        "expected": 85.19,
+        "error": 0.51,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 900,
+        "actual": 84.0,
+        "expected": 84.97,
+        "error": 0.97,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 920,
+        "actual": 83.7,
+        "expected": 84.06,
+        "error": 0.36,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 940,
+        "actual": 82.1,
+        "expected": 82.87,
+        "error": 0.77,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 950,
+        "actual": 82.2,
+        "expected": 82.57,
+        "error": 0.37,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 980,
+        "actual": 80.2,
+        "expected": 80.85,
+        "error": 0.65,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 990,
+        "actual": 81.4,
+        "expected": 80.54,
+        "error": 0.86,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 1000,
+        "actual": 80.5,
+        "expected": 79.85,
+        "error": 0.65,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 20,
+        "actual": 94.5,
+        "expected": 94.74,
+        "error": 0.24,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 40,
+        "actual": 93.9,
+        "expected": 94.76,
+        "error": 0.86,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 60,
+        "actual": 94.0,
+        "expected": 94.26,
+        "error": 0.26,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 80,
+        "actual": 94.2,
+        "expected": 94.05,
+        "error": 0.15,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 100,
+        "actual": 93.2,
+        "expected": 93.89,
+        "error": 0.69,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 120,
+        "actual": 93.0,
+        "expected": 93.9,
+        "error": 0.9,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 140,
+        "actual": 94.3,
+        "expected": 93.39,
+        "error": 0.91,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 160,
+        "actual": 94.0,
+        "expected": 93.18,
+        "error": 0.82,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 180,
+        "actual": 92.1,
+        "expected": 92.9,
+        "error": 0.8,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 200,
+        "actual": 92.5,
+        "expected": 92.68,
+        "error": 0.18,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 220,
+        "actual": 91.7,
+        "expected": 92.69,
+        "error": 0.99,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 240,
+        "actual": 93.3,
+        "expected": 92.47,
+        "error": 0.83,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 260,
+        "actual": 92.7,
+        "expected": 92.16,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 280,
+        "actual": 91.5,
+        "expected": 91.99,
+        "error": 0.49,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 300,
+        "actual": 92.6,
+        "expected": 91.74,
+        "error": 0.86,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 320,
+        "actual": 92.4,
+        "expected": 91.58,
+        "error": 0.82,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 340,
+        "actual": 90.4,
+        "expected": 91.03,
+        "error": 0.63,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 360,
+        "actual": 90.5,
+        "expected": 91.04,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 380,
+        "actual": 90.0,
+        "expected": 90.62,
+        "error": 0.62,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 400,
+        "actual": 90.4,
+        "expected": 90.63,
+        "error": 0.23,
+        "anomaly": false
+      }
+    ],
+    "eqp96": [
+      {
+        "date": "11-01",
+        "useTime": 250,
+        "actual": 92.4,
+        "expected": 92.39,
+        "error": 0.01,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 270,
+        "actual": 92.9,
+        "expected": 91.94,
+        "error": 0.96,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 290,
+        "actual": 91.2,
+        "expected": 91.92,
+        "error": 0.72,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 320,
+        "actual": 91.8,
+        "expected": 91.64,
+        "error": 0.16,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 330,
+        "actual": 91.6,
+        "expected": 91.39,
+        "error": 0.21,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 350,
+        "actual": 90.5,
+        "expected": 90.96,
+        "error": 0.46,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 370,
+        "actual": 89.9,
+        "expected": 90.91,
+        "error": 1.01,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 390,
+        "actual": 90.6,
+        "expected": 90.7,
+        "error": 0.1,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 410,
+        "actual": 89.9,
+        "expected": 90.59,
+        "error": 0.69,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 440,
+        "actual": 90.9,
+        "expected": 90.22,
+        "error": 0.68,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 460,
+        "actual": 90.7,
+        "expected": 90.08,
+        "error": 0.62,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 480,
+        "actual": 89.5,
+        "expected": 89.61,
+        "error": 0.11,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 500,
+        "actual": 90.4,
+        "expected": 89.47,
+        "error": 0.93,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 520,
+        "actual": 89.4,
+        "expected": 89.03,
+        "error": 0.37,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 540,
+        "actual": 88.5,
+        "expected": 89.04,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 560,
+        "actual": 87.8,
+        "expected": 88.99,
+        "error": 1.19,
+        "anomaly": true
+      },
+      {
+        "date": "11-17",
+        "useTime": 580,
+        "actual": 87.6,
+        "expected": 88.65,
+        "error": 1.05,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 590,
+        "actual": 87.8,
+        "expected": 88.47,
+        "error": 0.67,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 610,
+        "actual": 87.6,
+        "expected": 88.35,
+        "error": 0.75,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 630,
+        "actual": 88.9,
+        "expected": 88.02,
+        "error": 0.88,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 650,
+        "actual": 86.8,
+        "expected": 87.86,
+        "error": 1.06,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 670,
+        "actual": 88.1,
+        "expected": 87.67,
+        "error": 0.43,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 690,
+        "actual": 87.6,
+        "expected": 87.44,
+        "error": 0.16,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 710,
+        "actual": 86.6,
+        "expected": 87.14,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 730,
+        "actual": 87.3,
+        "expected": 86.87,
+        "error": 0.43,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 750,
+        "actual": 86.7,
+        "expected": 86.73,
+        "error": 0.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 760,
+        "actual": 85.9,
+        "expected": 86.46,
+        "error": 0.56,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 790,
+        "actual": 85.8,
+        "expected": 86.15,
+        "error": 0.35,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 810,
+        "actual": 86.3,
+        "expected": 85.83,
+        "error": 0.47,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 830,
+        "actual": 86.6,
+        "expected": 85.83,
+        "error": 0.77,
+        "anomaly": false
+      }
+    ],
+    "eqp53": [
+      {
+        "date": "11-01",
+        "useTime": 530,
+        "actual": 89.8,
+        "expected": 88.98,
+        "error": 0.82,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 550,
+        "actual": 88.7,
+        "expected": 88.95,
+        "error": 0.25,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 560,
+        "actual": 89.7,
+        "expected": 88.85,
+        "error": 0.85,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 590,
+        "actual": 87.7,
+        "expected": 88.5,
+        "error": 0.8,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 600,
+        "actual": 88.9,
+        "expected": 88.41,
+        "error": 0.49,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 620,
+        "actual": 87.1,
+        "expected": 88.03,
+        "error": 0.93,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 650,
+        "actual": 88.1,
+        "expected": 87.73,
+        "error": 0.37,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 670,
+        "actual": 88.2,
+        "expected": 87.62,
+        "error": 0.58,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 690,
+        "actual": 87.9,
+        "expected": 87.36,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 710,
+        "actual": 87.8,
+        "expected": 87.05,
+        "error": 0.75,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 730,
+        "actual": 86.3,
+        "expected": 86.83,
+        "error": 0.53,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 750,
+        "actual": 86.2,
+        "expected": 86.72,
+        "error": 0.52,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 770,
+        "actual": 87.3,
+        "expected": 86.32,
+        "error": 0.98,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 790,
+        "actual": 85.8,
+        "expected": 85.98,
+        "error": 0.18,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 810,
+        "actual": 85.1,
+        "expected": 85.82,
+        "error": 0.72,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 830,
+        "actual": 86.5,
+        "expected": 85.72,
+        "error": 0.78,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 850,
+        "actual": 84.9,
+        "expected": 85.68,
+        "error": 0.78,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 870,
+        "actual": 85.5,
+        "expected": 85.15,
+        "error": 0.35,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 890,
+        "actual": 85.9,
+        "expected": 84.97,
+        "error": 0.93,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 910,
+        "actual": 85.2,
+        "expected": 84.46,
+        "error": 0.74,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 930,
+        "actual": 82.9,
+        "expected": 83.31,
+        "error": 0.41,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 950,
+        "actual": 81.8,
+        "expected": 82.56,
+        "error": 0.76,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 970,
+        "actual": 82.0,
+        "expected": 81.59,
+        "error": 0.41,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 990,
+        "actual": 81.5,
+        "expected": 80.52,
+        "error": 0.98,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 1000,
+        "actual": 80.6,
+        "expected": 79.88,
+        "error": 0.72,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 20,
+        "actual": 94.3,
+        "expected": 94.72,
+        "error": 0.42,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 40,
+        "actual": 95.5,
+        "expected": 94.67,
+        "error": 0.83,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 60,
+        "actual": 94.3,
+        "expected": 94.32,
+        "error": 0.02,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 70,
+        "actual": 95.1,
+        "expected": 94.32,
+        "error": 0.78,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 100,
+        "actual": 93.8,
+        "expected": 93.87,
+        "error": 0.07,
+        "anomaly": false
+      }
+    ],
+    "eqp46": [
+      {
+        "date": "11-01",
+        "useTime": 850,
+        "actual": 85.1,
+        "expected": 85.62,
+        "error": 0.52,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 870,
+        "actual": 85.4,
+        "expected": 85.21,
+        "error": 0.19,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 890,
+        "actual": 85.8,
+        "expected": 84.99,
+        "error": 0.81,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 910,
+        "actual": 83.5,
+        "expected": 84.78,
+        "error": 1.28,
+        "anomaly": true
+      },
+      {
+        "date": "11-05",
+        "useTime": 930,
+        "actual": 83.4,
+        "expected": 83.4,
+        "error": 0.0,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 950,
+        "actual": 81.7,
+        "expected": 82.59,
+        "error": 0.89,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 980,
+        "actual": 80.5,
+        "expected": 80.84,
+        "error": 0.34,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 1000,
+        "actual": 80.5,
+        "expected": 79.86,
+        "error": 0.64,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 1000,
+        "actual": 80.5,
+        "expected": 79.86,
+        "error": 0.64,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 20,
+        "actual": 94.0,
+        "expected": 94.64,
+        "error": 0.64,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 40,
+        "actual": 94.1,
+        "expected": 94.74,
+        "error": 0.64,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 60,
+        "actual": 93.3,
+        "expected": 94.24,
+        "error": 0.94,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 80,
+        "actual": 93.3,
+        "expected": 94.09,
+        "error": 0.79,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 100,
+        "actual": 92.9,
+        "expected": 93.81,
+        "error": 0.91,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 110,
+        "actual": 94.8,
+        "expected": 93.8,
+        "error": 1.0,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 130,
+        "actual": 93.2,
+        "expected": 93.45,
+        "error": 0.25,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 150,
+        "actual": 93.7,
+        "expected": 93.22,
+        "error": 0.48,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 170,
+        "actual": 93.8,
+        "expected": 93.18,
+        "error": 0.62,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 190,
+        "actual": 91.9,
+        "expected": 92.95,
+        "error": 1.05,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 210,
+        "actual": 92.4,
+        "expected": 92.69,
+        "error": 0.29,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 230,
+        "actual": 92.4,
+        "expected": 92.51,
+        "error": 0.11,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 250,
+        "actual": 91.6,
+        "expected": 92.39,
+        "error": 0.79,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 260,
+        "actual": 91.5,
+        "expected": 92.15,
+        "error": 0.65,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 280,
+        "actual": 91.7,
+        "expected": 91.94,
+        "error": 0.24,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 300,
+        "actual": 92.5,
+        "expected": 91.7,
+        "error": 0.8,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 330,
+        "actual": 91.7,
+        "expected": 91.39,
+        "error": 0.31,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 340,
+        "actual": 90.8,
+        "expected": 90.96,
+        "error": 0.16,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 360,
+        "actual": 92.0,
+        "expected": 90.96,
+        "error": 1.04,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 380,
+        "actual": 90.1,
+        "expected": 90.7,
+        "error": 0.6,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 400,
+        "actual": 91.4,
+        "expected": 90.62,
+        "error": 0.78,
+        "anomaly": false
+      }
+    ],
+    "eqp88": [
+      {
+        "date": "11-01",
+        "useTime": 980,
+        "actual": 81.5,
+        "expected": 80.85,
+        "error": 0.65,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 1000,
+        "actual": 79.7,
+        "expected": 79.85,
+        "error": 0.15,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 20,
+        "actual": 95.4,
+        "expected": 94.74,
+        "error": 0.66,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 40,
+        "actual": 94.2,
+        "expected": 94.76,
+        "error": 0.56,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 60,
+        "actual": 95.1,
+        "expected": 94.26,
+        "error": 0.84,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 80,
+        "actual": 94.0,
+        "expected": 94.05,
+        "error": 0.05,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 100,
+        "actual": 93.1,
+        "expected": 93.89,
+        "error": 0.79,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 120,
+        "actual": 93.2,
+        "expected": 93.9,
+        "error": 0.7,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 140,
+        "actual": 93.4,
+        "expected": 93.39,
+        "error": 0.01,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 160,
+        "actual": 93.8,
+        "expected": 93.18,
+        "error": 0.62,
+        "anomaly": false
+      },
+      {
+        "date": "11-11",
+        "useTime": 180,
+        "actual": 92.1,
+        "expected": 92.9,
+        "error": 0.8,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 200,
+        "actual": 93.7,
+        "expected": 92.68,
+        "error": 1.02,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 210,
+        "actual": 93.6,
+        "expected": 92.68,
+        "error": 0.92,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 230,
+        "actual": 92.5,
+        "expected": 92.47,
+        "error": 0.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 250,
+        "actual": 92.0,
+        "expected": 92.45,
+        "error": 0.45,
+        "anomaly": false
+      },
+      {
+        "date": "11-16",
+        "useTime": 260,
+        "actual": 91.1,
+        "expected": 92.16,
+        "error": 1.06,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 280,
+        "actual": 92.6,
+        "expected": 91.99,
+        "error": 0.61,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 310,
+        "actual": 91.7,
+        "expected": 91.55,
+        "error": 0.15,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 330,
+        "actual": 90.8,
+        "expected": 91.34,
+        "error": 0.54,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 350,
+        "actual": 92.1,
+        "expected": 91.03,
+        "error": 1.07,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 370,
+        "actual": 90.1,
+        "expected": 90.82,
+        "error": 0.72,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 390,
+        "actual": 91.4,
+        "expected": 90.62,
+        "error": 0.78,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 410,
+        "actual": 90.2,
+        "expected": 90.55,
+        "error": 0.35,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 430,
+        "actual": 89.2,
+        "expected": 90.33,
+        "error": 1.13,
+        "anomaly": true
+      },
+      {
+        "date": "11-25",
+        "useTime": 450,
+        "actual": 90.2,
+        "expected": 90.0,
+        "error": 0.2,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 470,
+        "actual": 89.6,
+        "expected": 89.66,
+        "error": 0.06,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 490,
+        "actual": 88.6,
+        "expected": 89.43,
+        "error": 0.83,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 520,
+        "actual": 88.4,
+        "expected": 89.03,
+        "error": 0.63,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 530,
+        "actual": 89.6,
+        "expected": 88.94,
+        "error": 0.66,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 550,
+        "actual": 89.6,
+        "expected": 88.94,
+        "error": 0.66,
+        "anomaly": false
+      }
+    ],
+    "eqp52": [
+      {
+        "date": "11-01",
+        "useTime": 590,
+        "actual": 88.9,
+        "expected": 88.47,
+        "error": 0.43,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 610,
+        "actual": 87.7,
+        "expected": 88.35,
+        "error": 0.65,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 630,
+        "actual": 88.5,
+        "expected": 88.02,
+        "error": 0.48,
+        "anomaly": false
+      },
+      {
+        "date": "11-04",
+        "useTime": 650,
+        "actual": 87.4,
+        "expected": 87.86,
+        "error": 0.46,
+        "anomaly": false
+      },
+      {
+        "date": "11-05",
+        "useTime": 670,
+        "actual": 87.7,
+        "expected": 87.67,
+        "error": 0.03,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 690,
+        "actual": 86.8,
+        "expected": 87.44,
+        "error": 0.64,
+        "anomaly": false
+      },
+      {
+        "date": "11-07",
+        "useTime": 710,
+        "actual": 86.1,
+        "expected": 87.14,
+        "error": 1.04,
+        "anomaly": false
+      },
+      {
+        "date": "11-08",
+        "useTime": 730,
+        "actual": 86.7,
+        "expected": 86.87,
+        "error": 0.17,
+        "anomaly": false
+      },
+      {
+        "date": "11-09",
+        "useTime": 750,
+        "actual": 87.2,
+        "expected": 86.73,
+        "error": 0.47,
+        "anomaly": false
+      },
+      {
+        "date": "11-10",
+        "useTime": 760,
+        "actual": 87.6,
+        "expected": 86.46,
+        "error": 1.14,
+        "anomaly": true
+      },
+      {
+        "date": "11-11",
+        "useTime": 780,
+        "actual": 86.5,
+        "expected": 86.25,
+        "error": 0.25,
+        "anomaly": false
+      },
+      {
+        "date": "11-12",
+        "useTime": 800,
+        "actual": 85.8,
+        "expected": 85.87,
+        "error": 0.07,
+        "anomaly": false
+      },
+      {
+        "date": "11-13",
+        "useTime": 820,
+        "actual": 85.3,
+        "expected": 85.83,
+        "error": 0.53,
+        "anomaly": false
+      },
+      {
+        "date": "11-14",
+        "useTime": 840,
+        "actual": 86.6,
+        "expected": 85.83,
+        "error": 0.77,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 860,
+        "actual": 84.5,
+        "expected": 85.62,
+        "error": 1.12,
+        "anomaly": true
+      },
+      {
+        "date": "11-16",
+        "useTime": 880,
+        "actual": 84.6,
+        "expected": 85.21,
+        "error": 0.61,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 900,
+        "actual": 84.1,
+        "expected": 84.99,
+        "error": 0.89,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 910,
+        "actual": 83.8,
+        "expected": 84.78,
+        "error": 0.98,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 940,
+        "actual": 82.3,
+        "expected": 82.96,
+        "error": 0.66,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 950,
+        "actual": 82.7,
+        "expected": 82.59,
+        "error": 0.11,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 970,
+        "actual": 81.9,
+        "expected": 81.67,
+        "error": 0.23,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 990,
+        "actual": 79.8,
+        "expected": 80.66,
+        "error": 0.86,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 1000,
+        "actual": 79.1,
+        "expected": 79.86,
+        "error": 0.76,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 20,
+        "actual": 94.8,
+        "expected": 94.64,
+        "error": 0.16,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 40,
+        "actual": 95.0,
+        "expected": 94.74,
+        "error": 0.26,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 60,
+        "actual": 95.1,
+        "expected": 94.24,
+        "error": 0.86,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 70,
+        "actual": 94.9,
+        "expected": 94.25,
+        "error": 0.65,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 90,
+        "actual": 94.6,
+        "expected": 93.97,
+        "error": 0.63,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 110,
+        "actual": 94.5,
+        "expected": 93.8,
+        "error": 0.7,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 130,
+        "actual": 94.0,
+        "expected": 93.45,
+        "error": 0.55,
+        "anomaly": false
+      }
+    ],
+    "eqp55": [
+      {
+        "date": "11-01",
+        "useTime": 710,
+        "actual": 86.4,
+        "expected": 87.11,
+        "error": 0.71,
+        "anomaly": false
+      },
+      {
+        "date": "11-02",
+        "useTime": 730,
+        "actual": 85.9,
+        "expected": 86.88,
+        "error": 0.98,
+        "anomaly": false
+      },
+      {
+        "date": "11-03",
+        "useTime": 750,
+        "actual": 85.3,
+        "expected": 86.74,
+        "error": 1.44,
+        "anomaly": true
+      },
+      {
+        "date": "11-04",
+        "useTime": 770,
+        "actual": 85.0,
+        "expected": 86.39,
+        "error": 1.39,
+        "anomaly": true
+      },
+      {
+        "date": "11-05",
+        "useTime": 790,
+        "actual": 85.4,
+        "expected": 86.09,
+        "error": 0.69,
+        "anomaly": false
+      },
+      {
+        "date": "11-06",
+        "useTime": 810,
+        "actual": 84.0,
+        "expected": 85.88,
+        "error": 1.88,
+        "anomaly": true
+      },
+      {
+        "date": "11-07",
+        "useTime": 830,
+        "actual": 83.7,
+        "expected": 85.83,
+        "error": 2.13,
+        "anomaly": true
+      },
+      {
+        "date": "11-08",
+        "useTime": 850,
+        "actual": 83.9,
+        "expected": 85.59,
+        "error": 1.69,
+        "anomaly": true
+      },
+      {
+        "date": "11-09",
+        "useTime": 870,
+        "actual": 82.6,
+        "expected": 85.19,
+        "error": 2.59,
+        "anomaly": true
+      },
+      {
+        "date": "11-10",
+        "useTime": 890,
+        "actual": 82.6,
+        "expected": 85.03,
+        "error": 2.43,
+        "anomaly": true
+      },
+      {
+        "date": "11-11",
+        "useTime": 910,
+        "actual": 81.5,
+        "expected": 84.61,
+        "error": 3.11,
+        "anomaly": true
+      },
+      {
+        "date": "11-12",
+        "useTime": 930,
+        "actual": 81.0,
+        "expected": 83.33,
+        "error": 2.33,
+        "anomaly": true
+      },
+      {
+        "date": "11-13",
+        "useTime": 950,
+        "actual": 81.2,
+        "expected": 82.59,
+        "error": 1.39,
+        "anomaly": true
+      },
+      {
+        "date": "11-14",
+        "useTime": 970,
+        "actual": 81.5,
+        "expected": 81.72,
+        "error": 0.22,
+        "anomaly": false
+      },
+      {
+        "date": "11-15",
+        "useTime": 980,
+        "actual": 79.5,
+        "expected": 80.91,
+        "error": 1.41,
+        "anomaly": true
+      },
+      {
+        "date": "11-16",
+        "useTime": 1000,
+        "actual": 79.8,
+        "expected": 79.89,
+        "error": 0.09,
+        "anomaly": false
+      },
+      {
+        "date": "11-17",
+        "useTime": 20,
+        "actual": 94.4,
+        "expected": 94.74,
+        "error": 0.34,
+        "anomaly": false
+      },
+      {
+        "date": "11-18",
+        "useTime": 40,
+        "actual": 94.0,
+        "expected": 94.68,
+        "error": 0.68,
+        "anomaly": false
+      },
+      {
+        "date": "11-19",
+        "useTime": 60,
+        "actual": 93.5,
+        "expected": 94.29,
+        "error": 0.79,
+        "anomaly": false
+      },
+      {
+        "date": "11-20",
+        "useTime": 80,
+        "actual": 93.2,
+        "expected": 94.05,
+        "error": 0.85,
+        "anomaly": false
+      },
+      {
+        "date": "11-21",
+        "useTime": 110,
+        "actual": 93.9,
+        "expected": 93.84,
+        "error": 0.06,
+        "anomaly": false
+      },
+      {
+        "date": "11-22",
+        "useTime": 120,
+        "actual": 92.9,
+        "expected": 93.84,
+        "error": 0.94,
+        "anomaly": false
+      },
+      {
+        "date": "11-23",
+        "useTime": 140,
+        "actual": 92.5,
+        "expected": 93.28,
+        "error": 0.78,
+        "anomaly": false
+      },
+      {
+        "date": "11-24",
+        "useTime": 160,
+        "actual": 92.4,
+        "expected": 93.25,
+        "error": 0.85,
+        "anomaly": false
+      },
+      {
+        "date": "11-25",
+        "useTime": 180,
+        "actual": 92.1,
+        "expected": 92.9,
+        "error": 0.8,
+        "anomaly": false
+      },
+      {
+        "date": "11-26",
+        "useTime": 200,
+        "actual": 93.2,
+        "expected": 92.65,
+        "error": 0.55,
+        "anomaly": false
+      },
+      {
+        "date": "11-27",
+        "useTime": 220,
+        "actual": 91.7,
+        "expected": 92.66,
+        "error": 0.96,
+        "anomaly": false
+      },
+      {
+        "date": "11-28",
+        "useTime": 240,
+        "actual": 92.7,
+        "expected": 92.54,
+        "error": 0.16,
+        "anomaly": false
+      },
+      {
+        "date": "11-29",
+        "useTime": 260,
+        "actual": 91.5,
+        "expected": 92.14,
+        "error": 0.64,
+        "anomaly": false
+      },
+      {
+        "date": "11-30",
+        "useTime": 280,
+        "actual": 91.7,
+        "expected": 91.95,
+        "error": 0.25,
+        "anomaly": false
+      }
+    ]
+  },
+  "sensitivity": [
+    {
+      "percent": 0.5,
+      "threshold": 1.135,
+      "rows": 32,
+      "equipment": 17
+    },
+    {
+      "percent": 1.0,
+      "threshold": 1.097,
+      "rows": 48,
+      "equipment": 30
+    },
+    {
+      "percent": 2.0,
+      "threshold": 1.06,
+      "rows": 77,
+      "equipment": 47
+    },
+    {
+      "percent": 5.0,
+      "threshold": 0.988,
+      "rows": 167,
+      "equipment": 78
+    }
+  ]
+}

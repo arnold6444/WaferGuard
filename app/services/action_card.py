@@ -70,7 +70,7 @@ METROLOGY_WINDOWS = {
 
 
 def build_process_context(request: InspectRequest) -> dict[str, object]:
-    return {
+    context: dict[str, object] = {
         "lot_id": request.lot_id,
         "wafer_id": request.wafer_id,
         "line_id": request.line_id,
@@ -78,11 +78,23 @@ def build_process_context(request: InspectRequest) -> dict[str, object]:
         "tool_id": request.equipment_id,
         "recipe_id": request.recipe_id,
     }
+    if request.vision_source:
+        context["vision_evidence"] = {
+            "source": request.vision_source,
+            "statistical_score": request.vision_stat_score,
+            "ai_score": request.vision_ai_score,
+            "direction": request.vision_direction,
+            "sequence_label": request.vision_sequence_label,
+            "first_anomaly": request.vision_first_anomaly,
+            "anomaly_area_ratio": request.vision_anomaly_area_ratio,
+            "operator_note": request.operator_note,
+        }
+    return context
 
 
 def build_metrology_context(request: InspectRequest, hotspot_ratio: float) -> dict[str, object]:
     defect_count = request.defect_count
-    if defect_count is None:
+    if defect_count is None and not request.vision_source:
         defect_count = int(max(1, round(hotspot_ratio * 1200))) if hotspot_ratio > 0 else 0
     return {
         "cd_nm": request.cd_nm,
@@ -116,6 +128,8 @@ def build_action_card(
         if risk_level == "Medium"
         else "자동 통과 금지. lot 영향도와 설비 이력 즉시 확인"
     )
+    vision_evidence = process_context.get("vision_evidence")
+    has_vision_evidence = isinstance(vision_evidence, dict)
     return {
         "title": f"{defect_type} Defect Action Card",
         "defect_type": defect_type,
@@ -135,8 +149,17 @@ def build_action_card(
             "action": first_case.get("action", "Human-in-the-loop 검토 큐로 이동"),
         },
         "human_review_rule": review_rule,
-        "source_boundary": "WM-811K wafer map + local fixture 기반 판단 보조 카드입니다. 실제 fab root cause를 확정하지 않습니다.",
-        "threshold_basis": "demo SPC-style threshold입니다. 실제 fab spec/control limit가 아니며 구조 검증용 기준입니다.",
+        "source_boundary": (
+            "wafer_particle 과제 샘플의 영상 점수와 WaferGuard 판단 보조 결과입니다. "
+            "영상 신호만으로 파티클이나 실제 fab root cause를 확정하지 않습니다."
+            if has_vision_evidence
+            else "WM-811K wafer map + local fixture 기반 판단 보조 카드입니다. 실제 fab root cause를 확정하지 않습니다."
+        ),
+        "threshold_basis": (
+            "영상 통계 2.0 / AI 50.0 샘플 임계값입니다. 실제 fab spec/control limit나 일반화 성능을 의미하지 않습니다."
+            if has_vision_evidence
+            else "demo SPC-style threshold입니다. 실제 fab spec/control limit가 아니며 구조 검증용 기준입니다."
+        ),
     }
 
 
@@ -154,6 +177,42 @@ def evaluate_metrology_rules(
     yield_proxy = _float_value(metrology.get("yield_proxy"))
     step = str(process_context.get("process_step", "Inspection"))
     tool = str(process_context.get("tool_id", "tool"))
+    vision = process_context.get("vision_evidence")
+
+    if isinstance(vision, dict):
+        stat_score = _float_value(vision.get("statistical_score"))
+        ai_score = _float_value(vision.get("ai_score"))
+        area_ratio = _float_value(vision.get("anomaly_area_ratio"))
+        direction = str(vision.get("direction") or "위치 미상")
+        sequence = str(vision.get("sequence_label") or "시점 미상")
+        if stat_score is not None and ai_score is not None and stat_score >= 2.0 and ai_score >= 50.0:
+            area_text = f", 이상 면적 {area_ratio * 100:.2f}%" if area_ratio is not None else ""
+            hits.append(_rule_hit(
+                "Critical",
+                "Statistical and AI vision anomaly agreement",
+                f"영상 통계 {stat_score:.2f} / AI {ai_score:.2f}, {sequence}, {direction}{area_text}",
+                "해당 시점 원본·히트맵을 검토하고 같은 챔버의 저항 추세와 PM/세정 이력을 대조",
+                "Vision AI",
+                0.12,
+            ))
+        elif (stat_score is not None and stat_score >= 2.0) or (ai_score is not None and ai_score >= 50.0):
+            hits.append(_rule_hit(
+                "Warning",
+                "Single-detector vision anomaly",
+                f"영상 통계 {stat_score if stat_score is not None else '-'} / AI {ai_score if ai_score is not None else '-'}, {sequence}, {direction}",
+                "통계·AI 불일치 원인을 확인하고 촬영 조건 변화와 원본 영상을 우선 검토",
+                "Vision AI",
+                0.07,
+            ))
+        elif (stat_score is not None and stat_score >= 1.2) or (ai_score is not None and ai_score >= 35.0):
+            hits.append(_rule_hit(
+                "Warning",
+                "Vision caution threshold",
+                f"영상 통계 {stat_score if stat_score is not None else '-'} / AI {ai_score if ai_score is not None else '-'}, {sequence}",
+                "다음 시점 영상을 추적하고 기준영상·조명 조건을 재확인",
+                "Vision AI",
+                0.04,
+            ))
 
     if cd_nm is not None:
         window = METROLOGY_WINDOWS["cd_nm"]
