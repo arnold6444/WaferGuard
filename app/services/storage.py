@@ -21,8 +21,9 @@ def connect():
     """Backend-aware connection (SQLite or PostgreSQL), chosen by STORAGE_BACKEND.
 
     Used as ``with connect() as conn: conn.execute(...)`` throughout this module;
-    db.connect() returns either a sqlite3.Connection or a psycopg2 adapter that
-    exposes the same execute/executemany/executescript surface.
+    db.connect() returns either a closing sqlite3.Connection subclass or a
+    psycopg2 adapter that exposes the same execute/executemany/executescript
+    surface.
     """
     return db.connect()
 
@@ -170,6 +171,9 @@ def init_db() -> None:
         )
     seed_model_registry()
     cleanup_legacy_retraining_jobs()
+    from app.services.chamber_storage import init_chamber_db  # noqa: PLC0415
+
+    init_chamber_db()
 
 
 def cleanup_legacy_retraining_jobs() -> None:
@@ -1153,6 +1157,9 @@ BROWSABLE_TABLES: tuple[str, ...] = (
     "agent_traces",
     "pending_approvals",
     "rag_documents",
+    "chamber_telemetry",
+    "chamber_predictions",
+    "chamber_model_registry",
 )
 
 

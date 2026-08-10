@@ -67,3 +67,24 @@
 - Vision → Inspection Agent API handoff: 구현됨
 - 실제 설비 streaming / production threshold / 자동 장비 제어: 미구현
 - MLOps retrain/promote/rollback: workflow 검증용 simulation
+
+## 2026-08-10 — Multivariate Chamber Resistance Live/MLOps 구현
+
+- [x] recipe/setpoint, 장비 bias, cleaning/seasoning, 연속 시계열을 가진 `EtchTelemetryGenerator` 구현
+- [x] `idle`/`running`/`cleaning`/`maintenance`/`alarm` 및 8종 synthetic anomaly injection 구현
+- [x] `chamber_telemetry`, `chamber_predictions`, `chamber_model_registry`와 조회 index 추가
+- [x] numeric/categorical shared feature transform, unknown-safe OneHotEncoder, GradientBoosting 실제 `.fit()` 구현
+- [x] time-based holdout의 MAE/RMSE, USE_TIME-only baseline, Production 동일 holdout 비교 구현
+- [x] robust residual threshold, feature importance, joblib pipeline artifact 저장/재검증 구현
+- [x] warm-up bootstrap → Production reload → Actual/Expected/residual/anomaly 저장 구현
+- [x] 최근 median error + 신규 clean row readiness, `force=true` demo override, Staging candidate 구현
+- [x] artifact 검증, 기존 Production Archived, 선택 버전 Production promotion 구현
+- [x] Chamber 전용 status/equipment/telemetry/predictions/models/retrain/promote API 추가
+- [x] 기존 Static Demo를 유지하면서 2초 polling Live dashboard, 공정 delta, model/importance UI 추가
+- [x] generator·cleaning·gas drift·baseline 비교·RF 원인 anomaly·model lifecycle 테스트 추가
+
+구현 경계:
+
+- simulator range/계수/feature importance는 실제 Fab calibration 값이 아님
+- 실제 설비 연결과 production alarm/control limit는 범위 밖
+- 기존 wafer MLOps simulation과 Chamber 실제 sklearn registry/lifecycle은 분리

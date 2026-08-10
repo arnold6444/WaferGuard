@@ -36,6 +36,8 @@ _load_secrets()
 OUTPUT_DIR = ROOT_DIR / "outputs"
 IMAGE_DIR = OUTPUT_DIR / "images"
 DB_PATH = OUTPUT_DIR / "waferguard.db"
+RUNTIME_DIR = ROOT_DIR / "runtime"
+CHAMBER_MODEL_DIR = RUNTIME_DIR / "models" / "chamber"
 
 # --- Dual-mode backend toggles (default: all local, so dev is unchanged) ---
 IMAGE_BACKEND = os.environ.get("IMAGE_BACKEND", "local").lower()      # local | s3
@@ -53,3 +55,4 @@ RETRAIN_DURATION_SECONDS = 20
 def ensure_runtime_dirs() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    CHAMBER_MODEL_DIR.mkdir(parents=True, exist_ok=True)

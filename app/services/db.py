@@ -27,9 +27,19 @@ def backend() -> str:
 # ---------------------------------------------------------------------------
 # SQLite
 # ---------------------------------------------------------------------------
+class _SQLiteConn(sqlite3.Connection):
+    """SQLite connection whose context manager also releases the file handle."""
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        try:
+            return bool(super().__exit__(exc_type, exc, tb))
+        finally:
+            self.close()
+
+
 def _sqlite_conn() -> sqlite3.Connection:
     ensure_runtime_dirs()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, factory=_SQLiteConn)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -114,8 +124,8 @@ def _pg_conn() -> _PgConn:
 def connect():
     """Return a connection usable as ``with connect() as conn: conn.execute(...)``.
 
-    SQLite returns a real sqlite3.Connection (commits on __exit__, unchanged
-    legacy behavior). PostgreSQL returns an adapter that commits + closes.
+    Both backends commit and close on successful context-manager exit and roll
+    back and close when an exception escapes the block.
     """
     if backend() == "postgres":
         return _pg_conn()

@@ -25,6 +25,7 @@ from app.services.schemas import (
     AgentStreamRequest,
     ApprovalResolveRequest,
     AutomationTickRequest,
+    ChamberRetrainRequest,
     DemoSeedRequest,
     DriftRequest,
     HandoffReportRequest,
@@ -50,6 +51,8 @@ from app.services.storage import (
     record_review,
     resolve_approval,
 )
+from app.services import chamber_storage
+from app.services.chamber_runtime import chamber_runtime
 
 ensure_runtime_dirs()
 init_db()
@@ -264,6 +267,49 @@ def database_table(table_name: str, limit: int = 50, offset: int = 0) -> dict[st
     if result is None:
         raise HTTPException(status_code=404, detail="Unknown table")
     return result
+
+
+@app.get("/api/v1/chamber/status")
+def chamber_status() -> dict[str, object]:
+    return chamber_runtime.status()
+
+
+@app.get("/api/v1/chamber/equipment")
+def chamber_equipment() -> list[dict[str, object]]:
+    return chamber_storage.equipment_summary()
+
+
+@app.get("/api/v1/chamber/telemetry")
+def chamber_telemetry(equipment_id: str | None = None, limit: int = 200) -> list[dict[str, object]]:
+    return chamber_storage.telemetry_rows(equipment_id=equipment_id, limit=limit)
+
+
+@app.get("/api/v1/chamber/predictions")
+def chamber_predictions(equipment_id: str | None = None, limit: int = 200) -> list[dict[str, object]]:
+    return chamber_storage.prediction_rows(equipment_id=equipment_id, limit=limit)
+
+
+@app.get("/api/v1/chamber/models")
+def chamber_models() -> list[dict[str, object]]:
+    return chamber_storage.list_models()
+
+
+@app.post("/api/v1/chamber/retrain")
+def chamber_retrain(request: ChamberRetrainRequest) -> dict[str, object]:
+    result = chamber_runtime.retrain(force=request.force, trigger_type=request.trigger_type)
+    if not result["accepted"]:
+        raise HTTPException(status_code=409, detail=result)
+    return result
+
+
+@app.post("/api/v1/chamber/models/{version}/promote")
+def chamber_promote(version: str) -> dict[str, object]:
+    try:
+        return chamber_runtime.promote(version)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/automation/status")

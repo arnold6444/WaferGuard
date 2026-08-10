@@ -1,0 +1,70 @@
+stream:
+  equipment_count: 10
+  sample_interval_seconds: 1.0
+  recipe_duration_samples: 40
+  seed: 42
+
+maintenance:
+  cleaning_enabled: true
+  wafers_between_clean: 120
+  cleaning_samples: 1
+  seasoning_wafers: 12
+
+model:
+  bootstrap_min_rows: 120
+  min_training_rows: 80
+  holdout_fraction: 0.20
+  retrain_min_new_rows: 40
+  retrain_interval_hours: 24
+  recent_prediction_count: 30
+  drift_median_abs_error_multiplier: 1.50
+  auto_train: true
+  auto_promote: false
+  include_seasoning_feature: false
+
+# Demo coefficients and ranges below are synthetic. They are not Fab-calibrated
+# process limits or physical Resistance coefficients.
+anomalies:
+  pressure_drift_per_sample: 0.16
+  rf_drift_per_sample: 7.5
+  gas_drift_per_sample: 1.8
+  temperature_drift_per_sample: 0.22
+  resistance_drift_per_sample: 0.14
+  resistance_spike: 8.0
+
+recipes:
+  ETCH_OXIDE_A:
+    pressure_setpoint: 20.0
+    source_rf_setpoint: 780.0
+    bias_rf_setpoint: 165.0
+    chamber_temperature_setpoint: 58.0
+    esc_temperature_setpoint: 18.0
+    resistance_offset: -1.3
+    gases:
+      - {name: CHF3, flow_setpoint: 42.0}
+      - {name: CF4, flow_setpoint: 18.0}
+      - {name: Ar, flow_setpoint: 110.0}
+
+  ETCH_POLY_B:
+    pressure_setpoint: 13.5
+    source_rf_setpoint: 690.0
+    bias_rf_setpoint: 205.0
+    chamber_temperature_setpoint: 61.0
+    esc_temperature_setpoint: 20.0
+    resistance_offset: 1.8
+    gases:
+      - {name: HBr, flow_setpoint: 74.0}
+      - {name: Cl2, flow_setpoint: 31.0}
+      - {name: O2, flow_setpoint: 6.0}
+
+  ETCH_SILICON_C:
+    pressure_setpoint: 28.0
+    source_rf_setpoint: 840.0
+    bias_rf_setpoint: 128.0
+    chamber_temperature_setpoint: 55.0
+    esc_temperature_setpoint: 16.0
+    resistance_offset: 0.4
+    gases:
+      - {name: SF6, flow_setpoint: 52.0}
+      - {name: C4F8, flow_setpoint: 27.0}
+      - {name: Ar, flow_setpoint: 82.0}
