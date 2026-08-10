@@ -21,8 +21,9 @@ def connect():
     """Backend-aware connection (SQLite or PostgreSQL), chosen by STORAGE_BACKEND.
 
     Used as ``with connect() as conn: conn.execute(...)`` throughout this module;
-    db.connect() returns either a sqlite3.Connection or a psycopg2 adapter that
-    exposes the same execute/executemany/executescript surface.
+    db.connect() returns either a closing sqlite3.Connection subclass or a
+    psycopg2 adapter that exposes the same execute/executemany/executescript
+    surface.
     """
     return db.connect()
 

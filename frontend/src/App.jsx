@@ -1,14 +1,15 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Icon, RiskBadge, StatusDot } from "./lib";
 
-import InspectionWorkspace from "./InspectionWorkspace";
-import MlopsWorkspace      from "./MlopsWorkspace";
-import DatabaseView    from "./DatabaseView";
-import SettingsView    from "./SettingsView";
-import ChamberView     from "./ChamberView";
 import { SettingsProvider, useStream } from "./SettingsContext";
 import { MlopsAgentProvider } from "./MlopsAgentContext";
 import { DefectChatProvider } from "./DefectChatContext";
+
+const ChamberView = lazy(() => import("./ChamberView"));
+const InspectionWorkspace = lazy(() => import("./InspectionWorkspace"));
+const MlopsWorkspace = lazy(() => import("./MlopsWorkspace"));
+const DatabaseView = lazy(() => import("./DatabaseView"));
+const SettingsView = lazy(() => import("./SettingsView"));
 
 const NAV = [
   { id: "chamber", icon: "activity", label: "챔버 이상탐지", en: "Chamber AI",       View: ChamberView, badge: 5 },
@@ -188,11 +189,13 @@ function AppInner() {
             </div>
           </div>
 
-          <div key={active} className="fade-in">
-            <View focusId={cur.id === "inspect" ? agentFocus : undefined}
-              onFocusHandled={cur.id === "inspect" ? () => setAgentFocus(null) : undefined}
-              onOpenInspection={(inspectionId) => { setAgentFocus(inspectionId); setActive("inspect"); }} />
-          </div>
+          <Suspense fallback={<div className="panel" style={{ padding: 18 }}>화면을 불러오는 중입니다…</div>}>
+            <div key={active} className="fade-in">
+              <View focusId={cur.id === "inspect" ? agentFocus : undefined}
+                onFocusHandled={cur.id === "inspect" ? () => setAgentFocus(null) : undefined}
+                onOpenInspection={(inspectionId) => { setAgentFocus(inspectionId); setActive("inspect"); }} />
+            </div>
+          </Suspense>
         </main>
       </div>
     </div>
