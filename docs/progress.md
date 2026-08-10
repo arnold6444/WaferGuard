@@ -1,5 +1,7 @@
 # 진행 기록
 
+> 이 문서는 시간순 진행 기록입니다. 과거 시점의 구현 상태는 당시 기준 설명이며, **현재 상태는 맨 아래 최신 항목과 `README.md` / `docs/spec.md`를 우선**합니다.
+
 ## 2026-07-18 — Chamber Resistance AI MVP 완료
 
 - [x] Colab 알고리즘과 샘플 데이터 구조 확인
@@ -18,11 +20,7 @@
 - 최종 이상 후보: EQP10, EQP55
 - 이상 행: 48 / 3,000 (1.6%)
 
-다음 단계 후보:
-
-- 사용자가 업로드한 CSV를 서버에서 분석하는 API
-- 실제 장비 데이터 수집 주기 및 알림 규칙 연결
-- 엔지니어 승인 결과를 WaferGuard RAG/Inspection Agent 흐름과 연결
+이 구현은 현재 `Resistance > Static Demo`로 유지됩니다.
 
 ## 2026-08-02 — wafer_particle Vision AI 병합 완료
 
@@ -45,28 +43,19 @@
 - 통계·AI 판정 일치: 3,000 / 3,000
 - 해석 경계: 고유 정상 1종·불량 3종이 반복된 과제 샘플이며 실제 팹 성능을 의미하지 않음
 
-## 2026-08-10 — main 코드/문서 동기화
+## 2026-08-10 — main 코드/문서 동기화 (정적 구조 확인 시점)
 
-현재 `main` 브랜치의 실제 구현을 다시 확인하고 README 및 Chamber AI 사양을 코드 기준으로 정리했습니다.
+이 항목은 **Multivariate Live 기능 병합 직전의 main 상태를 기록한 historical snapshot**입니다.
 
-- [x] Chamber Resistance/Vision AI가 **런타임 실시간 모델이 아니라 정적 분석 스냅샷을 표시하는 구조**임을 명확히 문서화
-- [x] Vision 모드 전환이 모델 재추론이 아니라 미리 생성된 statistical/AI 결과의 표시 기준 전환임을 반영
-- [x] `vision_*` 전용 필드가 `POST /api/v1/inspect` → `process_context.vision_evidence` → Action Card rule로 전달되는 현재 흐름 반영
-- [x] 엔지니어 review는 `approved`/`false_alarm` 확정 사례만 RAG knowledge로 저장하는 실제 로직 반영
-- [x] 저장소가 local SQLite/local object storage와 PostgreSQL(RDS)/S3를 환경변수로 전환하는 dual-backend 구조임을 반영
-- [x] README의 잘못된 `app/schemas.py` 경로를 실제 `app/services/schemas.py`로 수정
-- [x] `/health` 실제 응답 `{"status":"ok","service":"waferguard-api"}` 반영
-- [x] `scripts/smoke_test.py`가 실행 중인 서버가 아니라 FastAPI `TestClient`를 직접 사용하는 구조임을 반영
-- [x] `build_chamber_dashboard_data.py` 재생성 시 필요한 optional dependency(`pandas`, `scikit-learn`) 명시
-- [x] 현재 frontend가 React 19 + Vite 7을 사용하므로 Node.js 요구사항을 Vite 7 기준으로 수정
-
-현재 문서 기준 구현 경계:
+당시 확인한 상태:
 
 - Resistance AI: CSV → offline analysis script → `chamberSample.json` → React visualization
 - Vision AI: external analyzer → snapshot builder → `waferVisionSample.json`/대표 이미지 → React visualization
 - Vision → Inspection Agent API handoff: 구현됨
 - 실제 설비 streaming / production threshold / 자동 장비 제어: 미구현
-- MLOps retrain/promote/rollback: workflow 검증용 simulation
+- 기존 MLOps retrain/promote/rollback: workflow 검증용 simulation
+
+아래 Live/MLOps 구현이 같은 날 이후 병합되면서 Resistance 현재 상태가 변경되었습니다.
 
 ## 2026-08-10 — Multivariate Chamber Resistance Live/MLOps 구현
 
@@ -83,8 +72,34 @@
 - [x] 기존 Static Demo를 유지하면서 2초 polling Live dashboard, 공정 delta, model/importance UI 추가
 - [x] generator·cleaning·gas drift·baseline 비교·RF 원인 anomaly·model lifecycle 테스트 추가
 
-구현 경계:
+검증 기록:
 
-- simulator range/계수/feature importance는 실제 Fab calibration 값이 아님
-- 실제 설비 연결과 production alarm/control limit는 범위 밖
-- 기존 wafer MLOps simulation과 Chamber 실제 sklearn registry/lifecycle은 분리
+- `python -m pytest tests/test_chamber.py -q -W error ...` → 6 passed, warning 0
+- `python -W error scripts/smoke_test.py` → passed
+- `python -m compileall -q app scripts tests` → passed
+- Vite production build → passed
+- `git diff --check` → passed
+
+## 2026-08-10 — 문서 재동기화
+
+최신 `main` 코드 기준으로 README/spec/plan/decision 문서를 다시 확인했습니다.
+
+- [x] Live와 Static Demo를 명확히 분리
+- [x] 로컬 SQLite `outputs/waferguard.db` / PostgreSQL(RDS) 전환 구조 명시
+- [x] 기존 workflow 9개 table + Chamber 3개 table이 같은 runtime DB backend를 사용함을 명시
+- [x] Chamber sklearn artifact가 `runtime/models/chamber/`에 저장됨을 명시
+- [x] 기존 wafer MLOps simulation과 Chamber 실제 sklearn lifecycle을 분리해 설명
+- [x] Chamber readiness는 계산하지만 자동 scheduler가 `retrain()`을 호출하지는 않는 현재 경계 명시
+- [x] simulator의 `wafer_count_since_clean` sample-driven counter, 순차 equipment clock, 유한 stream runner를 known simplification으로 기록
+
+### 현재 구현 경계
+
+- Chamber Resistance Live: synthetic stream → DB → 실제 sklearn fit/inference → residual anomaly → Staging/Production lifecycle
+- Chamber Static Demo: 기존 CSV/USE_TIME offline snapshot 유지
+- Vision AI: external `wafer_particle` 분석 결과 snapshot 표시
+- Vision → Inspection Agent handoff: 구현됨
+- 로컬 DB: SQLite `outputs/waferguard.db`; 운영 전환: PostgreSQL/RDS
+- 실제 설비 연결 / 실제 Fab control limit / 자동 장비 제어: 미구현
+- Chamber Production 승격: 명시적 promote
+- Chamber retrain: readiness gate + API/UI trigger, 자동 주기 retrain scheduler는 아직 미구현
+- 기존 wafer MLOps: simulation, Chamber MLOps: 실제 sklearn artifact/registry
