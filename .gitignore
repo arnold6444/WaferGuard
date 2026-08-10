@@ -6,6 +6,10 @@ outputs/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/vite.*.log
+backend.*.log
+.playwright-cli/
+output/
 .env
 .env.local
 .DS_Store

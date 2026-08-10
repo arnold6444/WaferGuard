@@ -50,6 +50,43 @@ def main() -> None:
     assert payload["action_card"]["metrology_rule_hits"]
     assert payload["action_card"]["metrology_risk_delta"] > 0
 
+    vision_inspection = client.post(
+        "/api/v1/inspect",
+        json={
+            "lot_id": "LOT-WAFER-VISION-SMOKE",
+            "wafer_id": "WF-CH061-D24-SMOKE",
+            "line_id": "LINE-7",
+            "equipment_id": "Chamber_061",
+            "process_step": "Inspection",
+            "recipe_id": "RCP-WAFER-VISION-COMPARE",
+            "image_source": "public_proxy",
+            "proxy_dataset": "wafer-particle-sample",
+            "defect_hint": "Edge-Loc",
+            "defect_count": None,
+            "yield_proxy": 0.982,
+            "operator_note": "Vision integration smoke test; sample evidence only.",
+            "vision_source": "wafer_particle comparison",
+            "vision_stat_score": 32.7134,
+            "vision_ai_score": 74.07,
+            "vision_direction": "오른쪽 아래",
+            "vision_sequence_label": "Day 24",
+            "vision_first_anomaly": "Day 24",
+            "vision_anomaly_area_ratio": 0.1355,
+            "use_llm": False,
+        },
+    )
+    assert vision_inspection.status_code == 200, vision_inspection.text
+    vision_payload = vision_inspection.json()
+    vision_hits = [
+        hit
+        for hit in vision_payload["action_card"]["metrology_rule_hits"]
+        if hit.get("owner") == "Vision AI"
+    ]
+    assert vision_payload["process_context"]["vision_evidence"]["direction"] == "오른쪽 아래"
+    assert vision_payload["metrology"]["defect_count"] is None
+    assert vision_hits and vision_hits[0]["severity"] == "Critical"
+    assert "wafer_particle" in vision_payload["action_card"]["source_boundary"]
+
     metrics = client.get("/api/v1/metrics")
     assert metrics.status_code == 200, metrics.text
     assert metrics.json()["total_inspections"] >= 1
@@ -194,6 +231,7 @@ def main() -> None:
         {
             "health": health.json()["status"],
             "inspection_id": payload["id"],
+            "vision_inspection_id": vision_payload["id"],
             "risk": payload["risk_level"],
             "agent_mode": payload.get("agent_mode", "n/a"),
             "metrology_rule_hits": len(payload["action_card"]["metrology_rule_hits"]),

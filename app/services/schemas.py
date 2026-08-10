@@ -47,6 +47,13 @@ class InspectRequest(BaseModel):
     defect_count: int | None = Field(default=None, ge=0, le=1000000)
     yield_proxy: float = Field(default=0.982, ge=0, le=1)
     operator_note: str = Field(default="", max_length=500)
+    vision_source: str | None = Field(default=None, max_length=80)
+    vision_stat_score: float | None = Field(default=None, ge=0, le=100)
+    vision_ai_score: float | None = Field(default=None, ge=0, le=100)
+    vision_direction: str | None = Field(default=None, max_length=40)
+    vision_sequence_label: str | None = Field(default=None, max_length=40)
+    vision_first_anomaly: str | None = Field(default=None, max_length=40)
+    vision_anomaly_area_ratio: float | None = Field(default=None, ge=0, le=1)
     use_llm: bool = True
 
 

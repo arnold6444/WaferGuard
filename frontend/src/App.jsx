@@ -5,11 +5,13 @@ import InspectionWorkspace from "./InspectionWorkspace";
 import MlopsWorkspace      from "./MlopsWorkspace";
 import DatabaseView    from "./DatabaseView";
 import SettingsView    from "./SettingsView";
+import ChamberView     from "./ChamberView";
 import { SettingsProvider, useStream } from "./SettingsContext";
 import { MlopsAgentProvider } from "./MlopsAgentContext";
 import { DefectChatProvider } from "./DefectChatContext";
 
 const NAV = [
+  { id: "chamber", icon: "activity", label: "챔버 이상탐지", en: "Chamber AI",       View: ChamberView, badge: 5 },
   { id: "inspect", icon: "layers",  label: "실시간 검사",    en: "Live Inspection", View: InspectionWorkspace },
   { id: "mlops",   icon: "box",     label: "MLOps 콘솔",    en: "MLOps",           View: MlopsWorkspace },
   { id: "data",    icon: "history", label: "데이터 관리",    en: "Data & RAG",      View: DatabaseView },
@@ -112,7 +114,7 @@ function Sidebar({ active, setActive }) {
 
 function AppInner() {
   const [theme, setTheme]   = useState("light");
-  const [active, setActive] = useState("inspect");
+  const [active, setActive] = useState("chamber");
   const [toast, setToast]   = useState(null);
   const [agentFocus, setAgentFocus] = useState(null);
   const { latest, tick } = useStream();
@@ -157,8 +159,8 @@ function AppInner() {
         <div className="vdivider" style={{ height: 26 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="chip" style={{ color: "var(--low)", borderColor: "var(--low)" }}><StatusDot kind="ok" />시스템 정상</span>
-          <span className="chip"><span style={{ color: "var(--text-3)" }}>모델</span> v4.2.1</span>
-          <span className="chip"><span style={{ color: "var(--text-3)" }}>큐</span> <span className="mono">3 대기</span></span>
+          <span className="chip"><span style={{ color: "var(--text-3)" }}>모델</span> {active === "chamber" ? "GBR · OOF" : "v4.2.1"}</span>
+          <span className="chip"><span style={{ color: "var(--text-3)" }}>{active === "chamber" ? "분석" : "큐"}</span> <span className="mono">{active === "chamber" ? "2 MODE" : "3 대기"}</span></span>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ textAlign: "right", lineHeight: 1.2 }}>
@@ -188,7 +190,8 @@ function AppInner() {
 
           <div key={active} className="fade-in">
             <View focusId={cur.id === "inspect" ? agentFocus : undefined}
-              onFocusHandled={cur.id === "inspect" ? () => setAgentFocus(null) : undefined} />
+              onFocusHandled={cur.id === "inspect" ? () => setAgentFocus(null) : undefined}
+              onOpenInspection={(inspectionId) => { setAgentFocus(inspectionId); setActive("inspect"); }} />
           </div>
         </main>
       </div>
