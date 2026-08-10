@@ -44,3 +44,26 @@
 - 이상 이미지: 51장
 - 통계·AI 판정 일치: 3,000 / 3,000
 - 해석 경계: 고유 정상 1종·불량 3종이 반복된 과제 샘플이며 실제 팹 성능을 의미하지 않음
+
+## 2026-08-10 — main 코드/문서 동기화
+
+현재 `main` 브랜치의 실제 구현을 다시 확인하고 README 및 Chamber AI 사양을 코드 기준으로 정리했습니다.
+
+- [x] Chamber Resistance/Vision AI가 **런타임 실시간 모델이 아니라 정적 분석 스냅샷을 표시하는 구조**임을 명확히 문서화
+- [x] Vision 모드 전환이 모델 재추론이 아니라 미리 생성된 statistical/AI 결과의 표시 기준 전환임을 반영
+- [x] `vision_*` 전용 필드가 `POST /api/v1/inspect` → `process_context.vision_evidence` → Action Card rule로 전달되는 현재 흐름 반영
+- [x] 엔지니어 review는 `approved`/`false_alarm` 확정 사례만 RAG knowledge로 저장하는 실제 로직 반영
+- [x] 저장소가 local SQLite/local object storage와 PostgreSQL(RDS)/S3를 환경변수로 전환하는 dual-backend 구조임을 반영
+- [x] README의 잘못된 `app/schemas.py` 경로를 실제 `app/services/schemas.py`로 수정
+- [x] `/health` 실제 응답 `{"status":"ok","service":"waferguard-api"}` 반영
+- [x] `scripts/smoke_test.py`가 실행 중인 서버가 아니라 FastAPI `TestClient`를 직접 사용하는 구조임을 반영
+- [x] `build_chamber_dashboard_data.py` 재생성 시 필요한 optional dependency(`pandas`, `scikit-learn`) 명시
+- [x] 현재 frontend가 React 19 + Vite 7을 사용하므로 Node.js 요구사항을 Vite 7 기준으로 수정
+
+현재 문서 기준 구현 경계:
+
+- Resistance AI: CSV → offline analysis script → `chamberSample.json` → React visualization
+- Vision AI: external analyzer → snapshot builder → `waferVisionSample.json`/대표 이미지 → React visualization
+- Vision → Inspection Agent API handoff: 구현됨
+- 실제 설비 streaming / production threshold / 자동 장비 제어: 미구현
+- MLOps retrain/promote/rollback: workflow 검증용 simulation
