@@ -4,44 +4,63 @@
 
 ## 현재 구현 방식
 
-Chamber AI는 하나의 메뉴 안에서 두 종류의 분석 결과를 보여줍니다.
+Chamber AI는 하나의 메뉴에서 Resistance와 Vision을 제공하며, Resistance 안에는 Live/Static Demo 모드가 있습니다.
 
-1. **Resistance AI**: 오프라인 Python 스크립트가 CSV를 분석해 `frontend/src/data/chamberSample.json`을 생성하고, React가 이 결과를 시각화합니다.
-2. **Vision AI**: 별도 `wafer_particle` 분석 API에서 미리 생성한 결과를 `frontend/src/data/waferVisionSample.json`과 대표 이미지로 저장하고, React가 이 스냅샷을 시각화합니다.
+1. **Resistance Live**: stateful simulator → Chamber DB → 실제 sklearn Production model → residual/anomaly DB → 2초 polling dashboard 흐름입니다.
+2. **Resistance Static Demo**: 기존 CSV offline 분석 결과인 `chamberSample.json`을 그대로 시각화합니다.
+3. **Vision AI**: 별도 `wafer_particle` 분석 API에서 미리 생성한 `waferVisionSample.json`과 대표 이미지 스냅샷을 시각화합니다.
 
-따라서 현재 두 모델은 브라우저 요청마다 다시 학습/추론하는 서비스가 아닙니다. 다만 Vision AI에서 선택한 분석 근거를 기존 WaferGuard FastAPI/Inspection Agent 흐름으로 전달하는 연동은 구현되어 있습니다.
+브라우저 요청마다 모델을 다시 학습하지 않습니다. 학습은 stream warm-up 또는 명시적 Chamber retrain 요청에서만 실행됩니다.
 
-## Resistance AI MVP
+## Resistance Live MVP
 
-- `챔버 이상탐지 / Chamber AI`를 WaferGuard의 첫 메뉴로 제공합니다.
-- 샘플 분석 범위, OOF MAE, 행 이상 임계값, 이상 EQP 수를 요약합니다.
-- 정상 RESISTANCE 패턴: 실제 중앙값/IQR과 정상 재학습 모델 예측값을 표시합니다.
-- EQP 날짜 추세: 실제값, 정상 예측값, 행 이상 시점을 표시합니다.
-- EQP 이상 맵: Median error와 Q95 error, MAD 경계를 함께 표시합니다.
-- 이상 점수 순위와 상위 EQP 판정표를 제공합니다.
-- EQP 선택 시 해당 설비의 날짜별 실제값/예측값 추세가 즉시 바뀝니다.
+### Simulator
 
-### Resistance 데이터·판정 기준
+- `EtchTelemetryGenerator`가 장비별 이전 값, recipe, use time, clean counter, seasoning, slow drift와 noise를 보존합니다.
+- `idle`, `running`, `cleaning`, `maintenance`, `alarm`을 지원하며 학습/추론은 `running` row만 사용합니다.
+- recipe는 pressure/source RF/bias RF/temperature와 서로 다른 3개 gas channel setpoint를 가집니다.
+- actual은 `setpoint + equipment bias + slow drift + short noise + optional anomaly`로 생성됩니다.
+- cleaning은 `use_time_since_clean`, `wafer_count_since_clean`, seasoning을 reset하지만 `use_time_total`은 유지합니다.
+- `resistance_spike`, `resistance_drift`, `pressure_drift`, `rf_power_drift`, `gas_flow_drift`, `temperature_drift`, `stuck_sensor`, `step_change`를 지원합니다.
 
-- 필수 입력 컬럼: `DATE`, `EQP`, `USE_TIME`, `RESISTANCE`
-- 모델: `GradientBoostingRegressor(loss="huber")`
-- 검증: EQP 그룹 단위 5-fold OOF
-- 1차 후보: EQP별 Median 또는 Q95 절대오차가 `중앙값 + 3.0 × scaled MAD` 초과
-- 정상 모델: 1차 후보를 제외한 EQP로 재학습
-- 행 이상: 정상 후보 OOF 절대오차의 상위 1% 초과
-- 최종 EQP 이상: 정상 EQP 분포의 Median 또는 Q95 경계 초과
-- 현재 샘플: 3,000행 / 100 EQP / 이상 후보 EQP10, EQP55
+모든 range와 synthetic coefficient는 실제 Fab에서 측정된 값이나 물리 계수가 아닙니다. 다변량 prediction/residual pipeline 검증용입니다.
 
-### Resistance 재생성
+### Model과 validation
 
-`build_chamber_dashboard_data.py`는 runtime `requirements.txt`에 없는 `pandas`, `scikit-learn`을 추가로 사용합니다.
+- target: `resistance`
+- numeric: use/clean history, pressure/RF/gas/temperature actual 및 setpoint delta
+- categorical: `equipment_id`, `recipe_id`, gas name
+- pipeline: `ColumnTransformer` + unknown-safe `OneHotEncoder` + `GradientBoostingRegressor(loss="huber")`
+- validation: 과거 train → 미래 holdout 순서를 지키는 time-based 80/20 split
+- metric: 실제 MAE/RMSE, 같은 holdout의 USE_TIME-only baseline, 현재 Production 비교
+- threshold: train과 future holdout residual 각각의 robust median/MAD 기준 중 큰 값
+- artifact: preprocessing과 model을 함께 `runtime/models/chamber/resistance-vN.joblib`에 저장
+
+### DB와 lifecycle
+
+- `chamber_telemetry`: recipe/state/setpoint/actual/clean history/Resistance/quality/synthetic ground truth
+- `chamber_predictions`: model version, Actual/Expected, residual, abs error, anomaly score/threshold/result
+- `chamber_model_registry`: artifact, MAE/RMSE, threshold, feature importance, holdout metadata, Staging/Production/Archived
+- Production 부재 시 clean running row가 `bootstrap_min_rows`에 도달하면 실제 `.fit()` 후 v1을 Production으로 등록합니다.
+- retraining candidate는 good/running, synthetic non-anomaly, Production non-anomaly row만 사용합니다.
+- readiness는 충분한 신규 clean row와 최근 최소 prediction의 median absolute error 또는 시간 조건을 함께 확인합니다. `force=true`는 로컬 demo용 readiness override이며 성능 비교는 생략하지 않습니다.
+- candidate가 같은 미래 holdout의 Production 비교를 통과해야 Staging으로 등록됩니다.
+- promotion은 artifact를 실제 load/검증한 뒤 기존 Production을 Archived로 바꾸고 선택 버전만 Production으로 만듭니다.
+
+### API와 화면
+
+- `GET /api/v1/chamber/status`, `/equipment`, `/telemetry`, `/predictions`, `/models`
+- `POST /api/v1/chamber/retrain`
+- `POST /api/v1/chamber/models/{version}/promote`
+- Live 화면은 선택 장비의 Actual/Expected/anomaly, 같은 시점의 pressure/RF/gas/temperature delta, model version과 synthetic-data feature importance를 표시합니다.
+
+### Static Demo 유지
+
+기존 `DATE`, `EQP`, `USE_TIME`, `RESISTANCE` 3,000행 분석, EQP 그룹 OOF, MAD 기반 EQP10/EQP55 결과는 `Static Demo`에 유지됩니다.
 
 ```bash
-pip install pandas scikit-learn
 python scripts/build_chamber_dashboard_data.py --input "/path/to/sample.csv" --output "frontend/src/data/chamberSample.json"
 ```
-
-원본 CSV는 저장소에 포함하지 않습니다.
 
 ## Wafer Vision AI 병합
 

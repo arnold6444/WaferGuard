@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Area,
   Bar,
@@ -31,6 +31,8 @@ const CHART_COLORS = {
   muted: "#AAB7C6",
   band: "rgba(27, 143, 174, 0.16)",
 };
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 
 function ChartTooltip({ active, payload, label, unit = " Ω" }) {
@@ -113,6 +115,207 @@ function FlowStep({ index, title, detail, active }) {
         <strong>{title}</strong>
         <p>{detail}</p>
       </div>
+    </div>
+  );
+}
+
+
+function LiveResistanceAnalysis() {
+  const [status, setStatus] = useState(null);
+  const [equipment, setEquipment] = useState([]);
+  const [predictions, setPredictions] = useState([]);
+  const [models, setModels] = useState([]);
+  const [selectedEqp, setSelectedEqp] = useState("");
+  const [error, setError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const query = selectedEqp ? `?equipment_id=${encodeURIComponent(selectedEqp)}&limit=180` : "?limit=180";
+      const responses = await Promise.all([
+        fetch(`${API_BASE}/api/v1/chamber/status`),
+        fetch(`${API_BASE}/api/v1/chamber/equipment`),
+        fetch(`${API_BASE}/api/v1/chamber/predictions${query}`),
+        fetch(`${API_BASE}/api/v1/chamber/models`),
+      ]);
+      if (!responses.every(response => response.ok)) throw new Error("Chamber API 응답을 확인해 주세요.");
+      const [nextStatus, nextEquipment, nextPredictions, nextModels] = await Promise.all(responses.map(response => response.json()));
+      setStatus(nextStatus);
+      setEquipment(nextEquipment);
+      setPredictions(nextPredictions);
+      setModels(nextModels);
+      if (!selectedEqp && nextEquipment.length) setSelectedEqp(nextEquipment[0].equipment_id);
+      setError("");
+    } catch (nextError) {
+      setError(nextError.message || "Live 데이터를 불러오지 못했습니다.");
+    }
+  }, [selectedEqp]);
+
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(load, 2000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  const requestRetrain = async () => {
+    setActionMessage("재학습 조건을 확인하고 있습니다…");
+    const response = await fetch(`${API_BASE}/api/v1/chamber/retrain`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trigger_type: "manual", force: false }),
+    });
+    const body = await response.json();
+    setActionMessage(response.ok ? `${body.candidate.version}이 Staging에 등록됐습니다.` : `대기: ${body.detail?.reason || "재학습 조건 미충족"}`);
+    await load();
+  };
+
+  const promote = async version => {
+    setActionMessage(`${version} 승격을 확인하고 있습니다…`);
+    const response = await fetch(`${API_BASE}/api/v1/chamber/models/${encodeURIComponent(version)}/promote`, { method: "POST" });
+    const body = await response.json();
+    setActionMessage(response.ok ? `${body.version}이 Production으로 승격됐습니다.` : `승격 실패: ${body.detail || "artifact 확인 필요"}`);
+    await load();
+  };
+
+  const chartData = useMemo(() => predictions.map(item => ({
+    ...item,
+    time: item.observed_at?.slice(11, 19),
+    pressure: item.pressure_delta,
+    sourceRf: item.source_rf_delta,
+    biasRf: item.bias_rf_delta,
+    gas: item.gas_flow_delta,
+    temperature: item.temperature_delta,
+  })), [predictions]);
+  const anomalySeries = chartData.filter(item => Boolean(item.is_anomaly));
+  const latest = chartData.at(-1);
+  const production = status?.production_model;
+  const importance = (production?.feature_importance || []).filter(item => item.importance > 0).slice(0, 8).reverse();
+  const currentEquipment = equipment.find(item => item.equipment_id === selectedEqp);
+  const live = status?.state === "LIVE";
+
+  return (
+    <div className="chamber-page">
+      <section className="panel chamber-live-hero">
+        <div>
+          <div className="chamber-eyebrow"><span />MULTIVARIATE ETCH · LIVE SYNTHETIC TELEMETRY</div>
+          <h2>공정 조건으로 예상 저항을 계산하고,<br />Actual과의 residual을 실시간 감시합니다.</h2>
+          <p>이 화면은 Etch 공정 변수와 maintenance 개념을 참고한 synthetic simulator입니다. 표시되는 범위·계수·중요도는 실제 Fab 기준이 아닙니다.</p>
+        </div>
+        <div className="chamber-live-actions">
+          <span className={`chamber-status ${live ? "chamber-status-low" : "chamber-status-med"}`}><span />{status?.state || "CONNECTING"}</span>
+          <button type="button" className="btn btn-sm" onClick={requestRetrain} disabled={!production}>재학습 조건 확인</button>
+        </div>
+      </section>
+
+      {error && <div className="panel chamber-live-notice is-error">{error}<code>python scripts/run_chamber_stream.py</code></div>}
+      {!error && !live && <div className="panel chamber-live-notice">clean running telemetry를 모으는 중입니다. 로컬 stream을 실행하면 bootstrap 후 실제 Production 모델이 생성됩니다.<code>python scripts/run_chamber_stream.py --equipment-count 3 --interval 1</code></div>}
+      {actionMessage && <div className="chamber-action-message">{actionMessage}</div>}
+
+      <div className="chamber-stats">
+        <StatCard label="Telemetry" value={(status?.telemetry_rows || 0).toLocaleString()} unit="rows" sub={`clean ${status?.clean_running_rows || 0} rows`} icon="layers" />
+        <StatCard label="Predictions" value={(status?.prediction_rows || 0).toLocaleString()} unit="rows" sub={production?.version || "warming up"} icon="activity" tone="low" />
+        <StatCard label="Holdout MAE" value={production ? production.mae.toFixed(3) : "—"} unit="Ω" sub={production ? `${production.metadata?.holdout_rows || 0} future rows` : "bootstrap 이후 표시"} icon="gauge" tone="med" />
+        <StatCard label="Residual threshold" value={production ? production.threshold.toFixed(3) : "—"} unit="Ω" sub="training residual · robust MAD" icon="alert" tone="high" />
+      </div>
+
+      <div className="panel chamber-live-equipment">
+        <div className="chamber-equipment-tabs" role="list" aria-label="Live 설비 선택">
+          {equipment.map(item => (
+            <button type="button" key={item.equipment_id} className={`focusable${selectedEqp === item.equipment_id ? " is-active" : ""}${item.is_anomaly ? " is-anomaly" : ""}`} onClick={() => setSelectedEqp(item.equipment_id)}>
+              {item.equipment_id}
+            </button>
+          ))}
+        </div>
+        <div className="chamber-live-eqp-meta">
+          <span>Recipe <strong className="mono">{currentEquipment?.recipe_id || "—"}</strong></span>
+          <span>State <strong>{currentEquipment?.machine_state || "—"}</strong></span>
+          <span>Model <strong className="mono">{currentEquipment?.model_version || production?.version || "—"}</strong></span>
+          <span>Residual <strong className="mono">{currentEquipment?.residual == null ? "—" : `${Number(currentEquipment.residual).toFixed(3)} Ω`}</strong></span>
+        </div>
+      </div>
+
+      <div className="chamber-grid chamber-grid-primary">
+        <Panel title={`${selectedEqp || "EQUIPMENT"} · Actual vs Expected Resistance`} icon="pulse" right={<span className="chip">2초 POLLING</span>}>
+          <div className="chamber-chart chamber-chart-lg">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: -7 }}>
+                <CartesianGrid stroke="var(--border-soft)" strokeDasharray="3 5" vertical={false} />
+                <XAxis dataKey="time" tick={{ fontSize: 9.5, fill: "var(--text-3)" }} axisLine={false} tickLine={false} minTickGap={28} />
+                <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "var(--text-3)" }} axisLine={false} tickLine={false} unit="Ω" />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend iconType="line" wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="expected_resistance" name="Expected" stroke={CHART_COLORS.accent} strokeWidth={2.5} dot={false} />
+                <Line type="monotone" dataKey="actual_resistance" name="Actual" stroke={CHART_COLORS.actual} strokeWidth={1.7} dot={false} />
+                <Scatter data={anomalySeries} dataKey="actual_resistance" name="Anomaly" fill={CHART_COLORS.high} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+
+        <Panel title="현재 공정 상태" icon="cpu" right={<AnomalyBadge anomaly={Boolean(latest?.is_anomaly)} />}>
+          <div className="chamber-process-grid">
+            <div><span>Pressure</span><strong>{latest ? Number(latest.chamber_pressure).toFixed(2) : "—"}<small>Torr*</small></strong><em>{latest ? `Δ ${Number(latest.pressure).toFixed(2)}` : ""}</em></div>
+            <div><span>Source RF</span><strong>{latest ? Number(latest.source_rf_power).toFixed(1) : "—"}<small>W*</small></strong><em>{latest ? `Δ ${Number(latest.sourceRf).toFixed(1)}` : ""}</em></div>
+            <div><span>Bias RF</span><strong>{latest ? Number(latest.bias_rf_power).toFixed(1) : "—"}<small>W*</small></strong><em>{latest ? `Δ ${Number(latest.biasRf).toFixed(1)}` : ""}</em></div>
+            <div><span>Total Gas</span><strong>{latest ? Number(latest.total_gas_flow).toFixed(1) : "—"}<small>sccm*</small></strong><em>{latest ? `Δ ${Number(latest.gas).toFixed(1)}` : ""}</em></div>
+            <div><span>Chamber Temp</span><strong>{latest ? Number(latest.chamber_temperature).toFixed(2) : "—"}<small>°C*</small></strong><em>{latest ? `Δ ${Number(latest.temperature).toFixed(2)}` : ""}</em></div>
+            <div><span>Since Clean</span><strong>{latest ? Number(latest.wafer_count_since_clean) : "—"}<small>wafers</small></strong><em>{latest ? `${Number(latest.use_time_since_clean).toFixed(3)} h` : ""}</em></div>
+          </div>
+          <p className="chamber-synthetic-note">* demo unit/range · 실제 장비 spec 아님</p>
+        </Panel>
+      </div>
+
+      <div className="chamber-grid chamber-grid-secondary">
+        <Panel title="Setpoint deviation at the same time" icon="activity" right={<span className="chip">CAUSE SIGNALS</span>}>
+          <div className="chamber-chart chamber-chart-md">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 10, right: 8, bottom: 0, left: -8 }}>
+                <CartesianGrid stroke="var(--border-soft)" strokeDasharray="3 5" vertical={false} />
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} minTickGap={30} />
+                <YAxis yAxisId="small" tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="power" orientation="right" tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} />
+                <Tooltip content={<ChartTooltip unit="" />} />
+                <Legend iconType="line" wrapperStyle={{ fontSize: 10 }} />
+                <Line yAxisId="small" type="monotone" dataKey="pressure" name="Pressure Δ" stroke="#7C5AC7" dot={false} />
+                <Line yAxisId="power" type="monotone" dataKey="sourceRf" name="Source RF Δ" stroke="#3F7FBF" dot={false} />
+                <Line yAxisId="power" type="monotone" dataKey="biasRf" name="Bias RF Δ" stroke={CHART_COLORS.med} dot={false} />
+                <Line yAxisId="power" type="monotone" dataKey="gas" name="Gas Δ" stroke="#2E9A5C" dot={false} />
+                <Line yAxisId="small" type="monotone" dataKey="temperature" name="Temp Δ" stroke={CHART_COLORS.high} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+
+        <Panel title="Synthetic-data model importance" icon="layers" right={<span className="chip">TOP 8</span>}>
+          <div className="chamber-chart chamber-chart-md">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={importance} layout="vertical" margin={{ top: 4, right: 20, bottom: 2, left: 2 }}>
+                <CartesianGrid stroke="var(--border-soft)" strokeDasharray="3 5" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="feature" width={145} tick={{ fontSize: 9, fill: "var(--text-2)" }} axisLine={false} tickLine={false} />
+                <Tooltip content={<ChartTooltip unit="" />} />
+                <Bar dataKey="importance" name="Importance" fill={CHART_COLORS.accent} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="Chamber model lifecycle" icon="gauge" right={<span className="chip">STAGING → PRODUCTION</span>}>
+        <div className="chamber-table-wrap">
+          <table className="chamber-table chamber-model-table">
+            <thead><tr><th>Version</th><th>Stage</th><th>MAE</th><th>RMSE</th><th>Rows</th><th>Artifact</th><th>Action</th></tr></thead>
+            <tbody>
+              {models.map(model => (
+                <tr key={model.version}>
+                  <td className="mono">{model.version}</td><td>{model.stage}</td><td className="mono">{Number(model.mae).toFixed(3)}</td><td className="mono">{Number(model.rmse).toFixed(3)}</td><td className="mono">{model.training_rows}</td><td className="mono">{model.artifact_path}</td>
+                  <td>{model.stage === "Staging" ? <button type="button" className="btn btn-sm" onClick={() => promote(model.version)}>Promote</button> : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -345,6 +548,20 @@ function ResistanceAnalysis() {
 }
 
 
+function ResistanceWorkspace() {
+  const [mode, setMode] = useState("live");
+  return (
+    <>
+      <div className="chamber-mode-switch" role="tablist" aria-label="Resistance 데이터 모드">
+        <button type="button" className={mode === "live" ? "is-active" : ""} onClick={() => setMode("live")}>Live</button>
+        <button type="button" className={mode === "static" ? "is-active" : ""} onClick={() => setMode("static")}>Static Demo</button>
+      </div>
+      {mode === "live" ? <LiveResistanceAnalysis /> : <ResistanceAnalysis />}
+    </>
+  );
+}
+
+
 export default function ChamberView({ onOpenInspection }) {
   const [analysisMode, setAnalysisMode] = useState("resistance");
   return (
@@ -358,7 +575,7 @@ export default function ChamberView({ onOpenInspection }) {
         onChange={setAnalysisMode}
       />
       {analysisMode === "resistance"
-        ? <ResistanceAnalysis />
+        ? <ResistanceWorkspace />
         : <WaferVisionView onOpenInspection={onOpenInspection} />}
     </>
   );

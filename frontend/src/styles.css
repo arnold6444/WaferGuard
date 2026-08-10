@@ -188,6 +188,30 @@ body {
 
 /* Chamber resistance anomaly dashboard */
 .chamber-page { display: flex; flex-direction: column; gap: 14px; }
+.chamber-mode-switch { display: inline-flex; align-self: flex-start; gap: 3px; margin: 0 0 12px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.chamber-mode-switch button { min-width: 92px; padding: 7px 13px; border: 0; border-radius: 6px; color: var(--text-3); background: transparent; cursor: pointer; font-size: 10.5px; font-weight: 750; }
+.chamber-mode-switch button.is-active { color: var(--accent); background: var(--panel); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.chamber-live-hero { display: flex; justify-content: space-between; gap: 24px; padding: 24px 28px; overflow: hidden; background: linear-gradient(135deg, var(--panel) 65%, var(--accent-dim)); }
+.chamber-live-hero h2 { margin: 9px 0 8px; color: var(--text); font-size: clamp(20px, 2.4vw, 29px); line-height: 1.25; letter-spacing: -.025em; }
+.chamber-live-hero p { max-width: 850px; margin: 0; color: var(--text-2); font-size: 11.5px; line-height: 1.65; }
+.chamber-live-actions { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 10px; flex: none; }
+.chamber-status-med { color: var(--med); background: var(--med-dim); border: 1px solid color-mix(in srgb, var(--med) 55%, transparent); }
+.chamber-status-med > span { background: var(--med); }
+.chamber-live-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 16px; color: var(--text-2); font-size: 10.5px; }
+.chamber-live-notice.is-error { color: var(--high); border-color: color-mix(in srgb, var(--high) 45%, var(--border)); }
+.chamber-live-notice code { color: var(--accent); font: 600 9.5px/1.4 'JetBrains Mono', monospace; }
+.chamber-action-message { padding: 9px 13px; border-radius: 7px; color: var(--accent); background: var(--accent-dim); border: 1px solid var(--accent-line); font-size: 10.5px; }
+.chamber-live-equipment { padding: 12px 14px 9px; }
+.chamber-live-eqp-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 3px 3px 4px; color: var(--text-3); font-size: 9.5px; }
+.chamber-live-eqp-meta strong { margin-left: 4px; color: var(--text); }
+.chamber-process-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.chamber-process-grid > div { padding: 10px 11px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border-soft); }
+.chamber-process-grid span { display: block; color: var(--text-3); font-size: 8.5px; }
+.chamber-process-grid strong { display: flex; align-items: baseline; gap: 4px; margin-top: 3px; color: var(--text); font: 700 15px/1.2 'JetBrains Mono', monospace; }
+.chamber-process-grid small { color: var(--text-3); font-size: 7.5px; }
+.chamber-process-grid em { display: block; margin-top: 4px; color: var(--accent); font: normal 600 8.5px/1.2 'JetBrains Mono', monospace; }
+.chamber-synthetic-note { margin: 9px 2px 0; color: var(--text-3); font-size: 8.5px; }
+.chamber-model-table { min-width: 760px; }
 
 .chamber-hero {
   min-height: 220px;
@@ -337,6 +361,10 @@ body {
   .chamber-stats { grid-template-columns: 1fr; }
   .chamber-flow { grid-template-columns: 1fr; }
   .chamber-chart-lg, .chamber-chart-md { height: 235px; }
+  .chamber-live-hero { flex-direction: column; padding: 20px; }
+  .chamber-live-actions { align-items: flex-start; }
+  .chamber-live-notice { align-items: flex-start; flex-direction: column; }
+  .chamber-process-grid { grid-template-columns: 1fr; }
 }
 
 /* wafer_particle vision workflow merged into Chamber AI */

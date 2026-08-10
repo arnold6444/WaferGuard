@@ -170,6 +170,9 @@ def init_db() -> None:
         )
     seed_model_registry()
     cleanup_legacy_retraining_jobs()
+    from app.services.chamber_storage import init_chamber_db  # noqa: PLC0415
+
+    init_chamber_db()
 
 
 def cleanup_legacy_retraining_jobs() -> None:
@@ -1153,6 +1156,9 @@ BROWSABLE_TABLES: tuple[str, ...] = (
     "agent_traces",
     "pending_approvals",
     "rag_documents",
+    "chamber_telemetry",
+    "chamber_predictions",
+    "chamber_model_registry",
 )
 
 

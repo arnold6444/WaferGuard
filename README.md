@@ -4,7 +4,7 @@
 
 WaferGuard는 반도체 공정에서 발생한 이상 신호를 한 화면에서 확인하고, 검사 결과를 **리스크 평가 → RAG 기반 원인/조치 추천 → 엔지니어 승인 → MLOps 판단** 흐름으로 연결하는 데모/MVP입니다.
 
-현재 저장소는 실제 Fab 설비를 직접 제어하는 시스템이 아니라, **샘플·프록시 데이터와 시뮬레이션을 이용해 운영 의사결정 흐름을 검증하는 구조**입니다. 특히 Chamber AI의 저항/영상 결과는 현재 정적 분석 스냅샷을 대시보드에 포함하고 있으며, 선택한 영상 근거를 기존 Inspection Agent 파이프라인으로 전달할 수 있습니다.
+현재 저장소는 실제 Fab 설비를 직접 제어하는 시스템이 아니라, **샘플·프록시 데이터와 시뮬레이션을 이용해 운영 의사결정 흐름을 검증하는 구조**입니다. Chamber Resistance는 synthetic multivariate telemetry를 DB·실제 sklearn 모델·residual 이상탐지와 연결한 Live 모드와 기존 정적 분석을 함께 제공하며, Vision 결과는 정적 스냅샷에서 선택한 근거를 기존 Inspection Agent 파이프라인으로 전달합니다.
 
 ## 📝 Overview
 
@@ -26,7 +26,7 @@ RAG knowledge feedback + MLOps delegation
 
 ### ⭐️ Key Features
 
-- **Chamber Resistance AI**: `USE_TIME → 정상 RESISTANCE` 관계를 Gradient Boosting으로 모델링한 샘플 분석 결과를 표시합니다. EQP 그룹 단위 OOF 검증과 MAD 기반 설비 판정을 사용합니다.
+- **Chamber Resistance AI**: recipe/setpoint, RF, pressure, gas, temperature, cleaning history를 가진 연속 synthetic telemetry로 실제 Gradient Boosting pipeline을 학습하고 Actual/Expected residual을 저장·탐지합니다. 기존 `USE_TIME` 정적 분석도 `Static Demo`로 유지합니다.
 - **Wafer Vision AI**: `wafer_particle` 분석 서버에서 미리 생성한 통계/정상 전용 AI 비교 결과와 대표 히트맵을 대시보드에서 탐색합니다.
 - **Live Inspection**: wafer/process 입력을 받아 리스크 점수, metrology/vision rule hit, Action Card, 이미지 근거를 생성하고 검사 이력으로 저장합니다.
 - **Inspection Agent**: LangGraph 기반 도구 호출 루프로 과거 사례와 공정 근거를 조회하고 추정 원인과 대응 방안을 제안합니다.
@@ -41,23 +41,24 @@ RAG knowledge feedback + MLOps delegation
 
 ![USE TIME 기반 챔버 저항 이상탐지 대시보드](docs/assets/chamber-dashboard-preview.png)
 
-현재 React 화면은 `frontend/src/data/chamberSample.json`을 읽어 표시합니다. 즉, 브라우저가 실행될 때 모델을 다시 학습하는 구조가 아니라 **오프라인 분석 스크립트로 결과 JSON을 만들고 프론트엔드가 그 스냅샷을 시각화하는 구조**입니다.
+Resistance 화면은 두 모드입니다.
 
-- 입력 샘플: `DATE`, `EQP`, `USE_TIME`, `RESISTANCE`
-- 모델: `GradientBoostingRegressor(loss="huber")`
-- 검증: EQP 그룹 단위 5-fold OOF
-- 설비 후보: EQP별 Median/Q95 절대오차 + scaled MAD 기준
-- 현재 샘플: 3,000행 / 100 EQP
-- 샘플 이상 후보: EQP10, EQP55
+- **Live**: `configs/chamber.yaml`의 recipe/setpoint를 기준으로 여러 장비의 연속 telemetry를 생성합니다. `running`/`quality=good` row로 실제 sklearn pipeline을 bootstrap하고, Production model로 Expected Resistance와 residual/anomaly를 DB에 저장합니다.
+- **Static Demo**: 기존 `DATE`, `EQP`, `USE_TIME`, `RESISTANCE` 3,000행 offline 분석과 EQP10/EQP55 결과를 그대로 유지합니다.
 
-샘플 JSON을 다시 만들려면 런타임 기본 의존성 외에 `pandas`, `scikit-learn`이 추가로 필요합니다.
+로컬 Live 데이터를 빠르게 만들려면 backend와 별도 터미널에서 실행합니다.
 
 ```bash
-pip install pandas scikit-learn
-python scripts/build_chamber_dashboard_data.py --input "/path/to/sample.csv" --output "frontend/src/data/chamberSample.json"
+python scripts/run_chamber_stream.py --equipment-count 3 --interval 0 --samples 180
 ```
 
-> 원본 `sample.csv`는 저장소에 포함하지 않습니다.
+일반 실행은 `--interval 1`을 사용합니다. `--anomaly rf_power_drift --anomaly-after 140`처럼 원인 parameter 이상을 주입할 수 있습니다. 생성되는 range, coefficient, feature importance는 pipeline 검증용 synthetic 값이며 실제 Fab spec이나 물리 계수가 아닙니다.
+
+기존 static JSON 재생성은 계속 지원합니다.
+
+```bash
+python scripts/build_chamber_dashboard_data.py --input "/path/to/sample.csv" --output "frontend/src/data/chamberSample.json"
+```
 
 ### 🖼️ Wafer Vision AI
 
@@ -130,8 +131,8 @@ python scripts/build_wafer_vision_dashboard_data.py --base-url http://127.0.0.1:
 | Frontend | React 19 · Vite 7 · Recharts 3 |
 | Runtime DB | 기본 SQLite / `STORAGE_BACKEND=postgres` 시 PostgreSQL(RDS) |
 | Object Storage | 기본 local `outputs/` / `IMAGE_BACKEND=s3` 시 S3 |
-| Workflow tables | 9개: inspections · model_registry · drift_events · retraining_jobs · alerts · handoff_reports · agent_traces · pending_approvals · rag_documents |
-| Chamber offline analysis | NumPy · pandas · scikit-learn (`build_chamber_dashboard_data.py`에서만 필요) |
+| Workflow tables | 기존 9개 + Chamber 3개: chamber_telemetry · chamber_predictions · chamber_model_registry |
+| Chamber ML | pandas · scikit-learn Pipeline/GradientBoosting · joblib · PyYAML |
 | AWS integration | boto3 · S3 · RDS · Secrets Manager · SNS · Lambda/EventBridge |
 
 ## 🛜 AWS Deployment
@@ -215,6 +216,12 @@ cd frontend
 npm run dev
 ```
 
+**터미널 3 — Chamber Live stream (선택)**
+
+```bash
+python scripts/run_chamber_stream.py --equipment-count 3 --interval 1
+```
+
 접속 주소:
 
 ```text
@@ -254,6 +261,13 @@ npm run build
 | GET/POST | `/api/v1/automation/status`, `/api/v1/automation/tick` | 자동화 상태/실행 |
 | GET | `/api/v1/rag/search` | 과거 사례 검색 |
 | GET | `/api/v1/db/overview` | workflow DB 개요 |
+| GET | `/api/v1/chamber/status` | warm-up/Production/readiness 상태 |
+| GET | `/api/v1/chamber/equipment` | 장비별 최신 상태 |
+| GET | `/api/v1/chamber/telemetry` | Chamber telemetry 조회 |
+| GET | `/api/v1/chamber/predictions` | Actual/Expected/residual/anomaly 조회 |
+| GET | `/api/v1/chamber/models` | Chamber model registry |
+| POST | `/api/v1/chamber/retrain` | readiness gate 후 실제 Candidate 학습 (`force=true` demo override) |
+| POST | `/api/v1/chamber/models/{version}/promote` | artifact 검증 후 명시적 Production 승격 |
 | GET | `/api/v1/mlops/state` | MLOps 상태 |
 | POST | `/api/v1/mlops/agent/run` | MLOps Agent 실행 |
 | POST | `/api/v1/mlops/drift` | drift 시뮬레이션 |
@@ -279,8 +293,12 @@ app/
     rag.py                   # RAG index / case retrieval
     defect_chat.py           # inspection chat + SSE streaming
     mlops.py                 # drift/retrain/promote/rollback simulation
+    chamber_generator.py     # stateful multivariate Etch simulator
+    chamber_storage.py       # Chamber telemetry/prediction/model DB access
+    chamber_training.py      # sklearn fit/evaluation/joblib artifact
+    chamber_runtime.py       # warm-up/inference/retrain/promote lifecycle
     automation.py            # periodic automation tick
-    storage.py               # workflow persistence / 9-table schema
+    storage.py               # workflow persistence / DB browser
     db.py                    # SQLite ↔ PostgreSQL abstraction
     object_store.py          # local outputs ↔ S3 abstraction
     luxia_client.py          # Luxia chat/embedding/rerank client
@@ -303,6 +321,7 @@ scripts/
   smoke_test.py
   build_wm811k_subset.py
   build_chamber_dashboard_data.py
+  run_chamber_stream.py
   build_wafer_vision_dashboard_data.py
 
 infra/
@@ -315,12 +334,14 @@ docs/
   AWS_*.md
 
 outputs/                     # local runtime DB/images/reports (gitignore)
+runtime/models/chamber/      # fitted Chamber pipeline artifacts (gitignore)
 ```
 
 ## 현재 구현 경계
 
-- Chamber Resistance 모델은 FastAPI 요청마다 학습/추론하지 않고 **오프라인 JSON 생성 방식**입니다.
+- Chamber Resistance Live는 synthetic stream, DB, 실제 sklearn fit/inference, residual 탐지, Staging/Production lifecycle을 연결합니다. 브라우저 요청마다 재학습하지 않고 stream/retrain 흐름에서만 학습합니다.
+- 기존 CSV 기반 `USE_TIME` 분석은 Static Demo로 유지됩니다.
 - Wafer Vision 탭 역시 **외부 `wafer_particle` 분석 결과의 정적 스냅샷**을 사용합니다.
 - Vision 결과를 Inspection Agent로 넘기는 API 연동은 구현되어 있습니다.
-- 실제 설비 스트리밍, 실제 Fab control limit, 자동 장비 제어, production 성능 보장은 현재 범위가 아닙니다.
-- MLOps retrain/promote/rollback은 운영 흐름 검증을 위한 시뮬레이션입니다.
+- 실제 설비 연결, 실제 Fab control limit, 자동 장비 제어, production 성능 보장은 현재 범위가 아닙니다.
+- 기존 wafer MLOps retrain/promote/rollback은 workflow 시뮬레이션이고, Chamber retrain은 별도 registry/artifact를 쓰는 실제 sklearn 학습입니다.
