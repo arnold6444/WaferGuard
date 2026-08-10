@@ -25,34 +25,70 @@ Chamber AI는 하나의 메뉴에서 Resistance와 Vision을 제공하며, Resis
 
 모든 range와 synthetic coefficient는 실제 Fab에서 측정된 값이나 물리 계수가 아닙니다. 다변량 prediction/residual pipeline 검증용입니다.
 
+현재 simulator 단순화:
+
+- `wafer_count_since_clean`은 실제 wafer cycle 완료 이벤트가 아니라 `running` sample마다 증가하는 demo counter입니다.
+- 여러 equipment sample은 하나의 generator clock을 순차 사용하므로 동일 round의 timestamp가 완전히 동일하지 않습니다.
+- `scripts/run_chamber_stream.py`는 local demo용 유한 sample/시간 runner이며 항상 실행되는 production daemon이 아닙니다.
+
 ### Model과 validation
 
 - target: `resistance`
 - numeric: use/clean history, pressure/RF/gas/temperature actual 및 setpoint delta
 - categorical: `equipment_id`, `recipe_id`, gas name
 - pipeline: `ColumnTransformer` + unknown-safe `OneHotEncoder` + `GradientBoostingRegressor(loss="huber")`
-- validation: 과거 train → 미래 holdout 순서를 지키는 time-based 80/20 split
+- validation: 과거 train → 미래 holdout 순서를 지키는 time-based split
 - metric: 실제 MAE/RMSE, 같은 holdout의 USE_TIME-only baseline, 현재 Production 비교
 - threshold: train과 future holdout residual 각각의 robust median/MAD 기준 중 큰 값
 - artifact: preprocessing과 model을 함께 `runtime/models/chamber/resistance-vN.joblib`에 저장
 
-### DB와 lifecycle
+`equipment_id`는 현재 categorical feature에 포함됩니다. 따라서 실제 Fab 배포 시 설비 ID 일반화/누수 정책은 별도 검토가 필요합니다.
+
+### DB와 저장 위치
+
+WaferGuard는 Chamber용 별도 DB 서버를 만들지 않습니다. 기존 runtime DB backend 안에 Chamber 전용 table을 추가합니다.
+
+- 로컬 기본: SQLite `outputs/waferguard.db`
+- 운영 전환: `STORAGE_BACKEND=postgres` → PostgreSQL/RDS
+- 이미지/리포트: local `outputs/` 또는 `IMAGE_BACKEND=s3` → S3
+- Chamber sklearn artifact: `runtime/models/chamber/`
+
+기존 workflow 9개 table과 Chamber 3개 table이 같은 DB backend를 사용합니다.
+
+Chamber table:
 
 - `chamber_telemetry`: recipe/state/setpoint/actual/clean history/Resistance/quality/synthetic ground truth
 - `chamber_predictions`: model version, Actual/Expected, residual, abs error, anomaly score/threshold/result
 - `chamber_model_registry`: artifact, MAE/RMSE, threshold, feature importance, holdout metadata, Staging/Production/Archived
+
+### Lifecycle
+
 - Production 부재 시 clean running row가 `bootstrap_min_rows`에 도달하면 실제 `.fit()` 후 v1을 Production으로 등록합니다.
 - retraining candidate는 good/running, synthetic non-anomaly, Production non-anomaly row만 사용합니다.
-- readiness는 충분한 신규 clean row와 최근 최소 prediction의 median absolute error 또는 시간 조건을 함께 확인합니다. `force=true`는 로컬 demo용 readiness override이며 성능 비교는 생략하지 않습니다.
+- readiness는 충분한 신규 clean row와 최근 최소 prediction의 median absolute error 또는 시간 조건을 함께 확인합니다.
+- `force=true`는 로컬 demo용 readiness override이며 candidate/Production 성능 비교는 생략하지 않습니다.
 - candidate가 같은 미래 holdout의 Production 비교를 통과해야 Staging으로 등록됩니다.
 - promotion은 artifact를 실제 load/검증한 뒤 기존 Production을 Archived로 바꾸고 선택 버전만 Production으로 만듭니다.
 
+중요한 현재 경계:
+
+- readiness 계산은 구현되어 있습니다.
+- 하지만 Chamber readiness를 주기적으로 자동 검사해 `retrain()`을 실행하는 scheduler는 아직 없습니다.
+- 실제 retrain은 `/api/v1/chamber/retrain` 또는 Live UI의 retrain action이 호출해야 시작됩니다.
+- Production promotion 역시 명시적 API/UI action입니다.
+- 기존 `/api/v1/automation/tick` 및 AWS Lambda/EventBridge automation은 기존 wafer/운영 workflow용이며 Chamber retraining scheduler와 동일하지 않습니다.
+
 ### API와 화면
 
-- `GET /api/v1/chamber/status`, `/equipment`, `/telemetry`, `/predictions`, `/models`
+- `GET /api/v1/chamber/status`
+- `GET /api/v1/chamber/equipment`
+- `GET /api/v1/chamber/telemetry`
+- `GET /api/v1/chamber/predictions`
+- `GET /api/v1/chamber/models`
 - `POST /api/v1/chamber/retrain`
 - `POST /api/v1/chamber/models/{version}/promote`
-- Live 화면은 선택 장비의 Actual/Expected/anomaly, 같은 시점의 pressure/RF/gas/temperature delta, model version과 synthetic-data feature importance를 표시합니다.
+
+Live 화면은 선택 장비의 Actual/Expected/anomaly, 같은 시점의 pressure/RF/gas/temperature delta, model version과 synthetic-data feature importance를 표시합니다. API를 2초 주기로 polling합니다.
 
 ### Static Demo 유지
 
@@ -64,7 +100,7 @@ python scripts/build_chamber_dashboard_data.py --input "/path/to/sample.csv" --o
 
 ## Wafer Vision AI 병합
 
-- 기존 Resistance AI를 기본 탭으로 유지하고 같은 `Chamber AI` 안에 Vision AI 탭을 추가합니다.
+- 같은 `Chamber AI` 안에 Vision AI 탭을 제공합니다.
 - 화면에는 `statistical`, `ai`, `comparison` 세 표시 모드가 있습니다.
 - 이 모드 전환은 **이미 생성된 통계/AI 결과를 어떤 기준으로 보여줄지 변경하는 UI 기능**이며, 현재 React 안에서 모델을 새로 실행하지 않습니다.
 - 100개 챔버 상태판, 이상 순위, 최초 발생 시점·방향, 30일 점수 추세를 표시합니다.
@@ -108,15 +144,19 @@ WaferGuard 저장소에는 `wafer_particle` 서버 전체나 원본 3,000장을 
 
 - 기존 Live Inspection 기능 유지
 - 기존 Inspection Agent / RAG / Action Card 유지
-- 기존 MLOps Agent / approval workflow 유지
+- 기존 wafer MLOps Agent / approval workflow 유지
 - Vision evidence를 검사 건으로 등록한 뒤 기존 Inspection Agent 화면으로 이동
-- `approved` 또는 `false_alarm`으로 확정된 엔지니어 review는 기존 RAG knowledge feedback 흐름에 포함 가능
+- `approved` 또는 `false_alarm`으로 확정된 엔지니어 review는 기존 RAG knowledge feedback 흐름에 포함
+- 기존 wafer MLOps simulation과 Chamber 실제 sklearn registry/lifecycle은 분리
 
 ## MVP 밖
 
 - 브라우저에서 임의 CSV를 업로드해 Resistance 모델을 즉시 다시 학습하는 기능
 - WaferGuard FastAPI 내부에서 `wafer_particle` 모델을 실시간 실행하는 기능
 - 실제 장비 스트리밍 및 생산 알람 규칙 연결
+- Chamber readiness 기반 자동 retrain scheduler
+- 자동 Production promotion
+- 실제 wafer cycle event 기반 `wafer_count_since_clean`
 - 영상만으로 파티클·물리 원인을 확정하는 기능
 - `wafer_particle` 전체 서버를 WaferGuard 런타임에 복제하거나 자동 재학습하는 기능
 - 실제 Fab control limit, 수율 개선 효과 또는 생산 적용 성능 주장
