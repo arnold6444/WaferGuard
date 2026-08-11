@@ -21,7 +21,13 @@ class DataQualityResult:
 
 
 class ChamberDataQualityGate:
-    """Validate ordering, sampling, values and categorical contracts per tool."""
+    """Validate ordering, sampling, values and categorical contracts per tool.
+
+    The gate is intentionally stateful because duplicate/timestamp/stuck checks
+    depend on prior samples. ``restore_from_rows`` reconstructs that state after
+    a stream restart from persisted telemetry so a process restart does not
+    silently reset data-quality history.
+    """
 
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
@@ -46,6 +52,64 @@ class ChamberDataQualityGate:
         self._last_values: dict[tuple[str, str], float] = {}
         self._stuck_counts: dict[tuple[str, str], int] = {}
         self._issue_counts: dict[tuple[str, str], int] = {}
+
+    def restore_from_rows(self, rows: list[dict[str, Any]]) -> int:
+        """Rehydrate temporal/stuck/aggregate state from persisted telemetry.
+
+        Call with a small recent history per equipment ordered arbitrarily; this
+        method sorts by observed_at. Invalid historic values are ignored rather
+        than making restart fail.
+        """
+        ordered = sorted(rows, key=lambda row: (str(row.get("equipment_id") or ""), str(row.get("observed_at") or "")))
+        restored = 0
+        for row in ordered:
+            equipment_id = str(row.get("equipment_id") or "")
+            if not equipment_id:
+                continue
+            try:
+                timestamp = datetime.fromisoformat(str(row.get("observed_at")).replace("Z", "+00:00"))
+            except (TypeError, ValueError):
+                continue
+            self._last_timestamp[equipment_id] = timestamp
+            self._last_signature[equipment_id] = self._signature(row)
+
+            state = str(row.get("machine_state") or "")
+            if state == "running":
+                for sensor in self.stuck_sensors:
+                    numeric = self._safe_float(row.get(sensor))
+                    if numeric is None:
+                        continue
+                    key = (equipment_id, sensor)
+                    previous = self._last_values.get(key)
+                    if previous is not None and abs(numeric - previous) <= self.stuck_tolerance:
+                        self._stuck_counts[key] = self._stuck_counts.get(key, 1) + 1
+                    else:
+                        self._stuck_counts[key] = 1
+                    self._last_values[key] = numeric
+            else:
+                for sensor in self.stuck_sensors:
+                    self._stuck_counts.pop((equipment_id, sensor), None)
+
+            issues_raw = row.get("data_quality_issues", row.get("data_quality_issues_json", []))
+            if isinstance(issues_raw, str):
+                try:
+                    issues_raw = json.loads(issues_raw)
+                except json.JSONDecodeError:
+                    issues_raw = []
+            issues = issues_raw if isinstance(issues_raw, list) else []
+            current_ids = {
+                self._issue_identity(issue)
+                for issue in issues
+                if isinstance(issue, dict)
+            }
+            known = {issue_id for tool, issue_id in self._issue_counts if tool == equipment_id}
+            for issue_id in known - current_ids:
+                self._issue_counts.pop((equipment_id, issue_id), None)
+            for issue_id in current_ids:
+                key = (equipment_id, issue_id)
+                self._issue_counts[key] = self._issue_counts.get(key, 0) + 1
+            restored += 1
+        return restored
 
     def validate(self, sample: dict[str, Any]) -> DataQualityResult:
         equipment_id = str(sample.get("equipment_id") or "UNKNOWN")
@@ -81,16 +145,21 @@ class ChamberDataQualityGate:
                     )
                 )
 
+        numeric_values: dict[str, float] = {}
         for field, limits in self.ranges.items():
             value = sample.get(field)
             if value is None:
                 continue
+            numeric = self._safe_float(value)
             try:
-                numeric = float(value)
                 lower, upper = float(limits[0]), float(limits[1])
             except (TypeError, ValueError, IndexError):
-                issues.append(self._issue("invalid_numeric", REJECT, f"{field} is not numeric"))
+                issues.append(self._issue("invalid_range_config", REJECT, f"Invalid physical range for {field}"))
                 continue
+            if numeric is None:
+                issues.append(self._issue("invalid_numeric", REJECT, f"{field} is not numeric", field=field))
+                continue
+            numeric_values[field] = numeric
             if not lower <= numeric <= upper:
                 issues.append(
                     self._issue(
@@ -106,8 +175,16 @@ class ChamberDataQualityGate:
                 value = sample.get(sensor)
                 if value is None:
                     continue
+                numeric = numeric_values.get(sensor)
+                if numeric is None:
+                    numeric = self._safe_float(value)
+                if numeric is None:
+                    if not any(issue.get("code") == "invalid_numeric" and issue.get("field") == sensor for issue in issues):
+                        issues.append(self._issue("invalid_numeric", REJECT, f"{sensor} is not numeric", field=sensor))
+                    self._stuck_counts.pop((equipment_id, sensor), None)
+                    self._last_values.pop((equipment_id, sensor), None)
+                    continue
                 key = (equipment_id, sensor)
-                numeric = float(value)
                 previous = self._last_values.get(key)
                 if previous is not None and abs(numeric - previous) <= self.stuck_tolerance:
                     self._stuck_counts[key] = self._stuck_counts.get(key, 1) + 1
@@ -145,6 +222,13 @@ class ChamberDataQualityGate:
             self._last_timestamp[equipment_id] = timestamp
             self._last_signature[equipment_id] = signature
         return DataQualityResult(status, issues, aggregate_events, persistable)
+
+    @staticmethod
+    def _safe_float(value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _issue(code: str, severity: str, detail: str, *, field: str | None = None) -> dict[str, Any]:

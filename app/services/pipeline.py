@@ -42,10 +42,6 @@ def _run_agent_background(evidence: dict) -> None:
         )
 
 
-# Serialize background agent runs through a single worker. The live stream can
-# fire an inspection every couple of seconds; firing a concurrent LLM agent run
-# for each one bursts the API rate limit (HTTP 429). One-at-a-time keeps the
-# request rate gentle. A small bounded backlog drops excess rather than piling up.
 _AGENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent")
 _AGENT_MAX_PENDING = 4
 _AGENT_PENDING = 0
@@ -86,19 +82,14 @@ def _save_report_csv(inspection_id: str, record: dict) -> str:
     ]
     writer.writerow(cols)
     writer.writerow([record.get(c) for c in cols])
-    data = buf.getvalue().encode("utf-8-sig")  # BOM → Excel reads Korean headers
+    data = buf.getvalue().encode("utf-8-sig")
     return object_store.put_bytes(f"reports/{inspection_id}.csv", data, "text/csv")
 
 
 def _save_report_pdf(inspection_id: str, record: dict) -> str | None:
-    """Render the report text to a simple PDF (best-effort). Returns key or None.
-
-    fpdf2's core fonts are latin-1 only; Korean glyphs are replaced rather than
-    crashing. For fully legible Korean, register a TTF via pdf.add_font(). The
-    CSV (above) always holds the machine-readable data.
-    """
+    """Render the report text to a simple PDF (best-effort). Returns key or None."""
     try:
-        from fpdf import FPDF  # noqa: PLC0415 — optional dependency
+        from fpdf import FPDF  # noqa: PLC0415
     except Exception:  # noqa: BLE001
         return None
     try:
@@ -114,12 +105,17 @@ def _save_report_pdf(inspection_id: str, record: dict) -> str | None:
         return None
 
 
+def _utc_iso(value: datetime | None) -> str:
+    """Serialize one instant in UTC so TEXT timestamp comparisons stay valid."""
+    if value is None:
+        return utc_now()
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
 def run_inspection(request: InspectRequest) -> dict[str, object]:
-    inspection_at = (
-        request.inspection_timestamp.isoformat(timespec="seconds")
-        if request.inspection_timestamp
-        else utc_now()
-    )
+    inspection_at = _utc_iso(request.inspection_timestamp)
     defect_type = choose_defect(request.defect_hint)
     inspection_id = _inspection_id(request.wafer_id, defect_type)
     repeat_weight = _repeat_weight(request.line_id, defect_type)
@@ -185,7 +181,6 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
         metrology_rule_hits=metrology_rule_hits,
     )
 
-    # Agent escalation: Low → rule-based only; Medium/High/review_required → Agent
     agent_result: dict | None = None
     needs_agent = level in ("Medium", "High") or status == "review_required"
     if needs_agent:
@@ -208,11 +203,6 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
         }
         llm_active = request.use_llm and bool(os.environ.get("LUXIA_API_KEY", "").strip())
         if llm_active:
-            # LLM analysis takes seconds — run it in the background so the
-            # inspect response (and the live stream) returns immediately.
-            # Serialized through a single worker so concurrent stream inspections
-            # don't burst the LLM rate limit. The agent persists its trace, which
-            # the Agent tab polls for.
             _submit_agent(evidence)
             agent_result = {
                 "final_action": None,
@@ -252,8 +242,6 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
         "risk_score": risk_score,
         "risk_level": level,
         "hotspot_ratio": image_result["hotspot_ratio"],
-        # Store canonical object keys (never expiring presigned URLs). Read-time
-        # presigning happens in storage._inspection_to_dict.
         "image_url": image_result["image_key"],
         "heatmap_url": image_result["heatmap_key"],
         "overlay_url": image_result["overlay_key"],
@@ -263,7 +251,6 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
         "cases": cases,
         "process_context": process_context,
         "metrology": metrology,
-        # Metrology values also as individual columns for SQL search/aggregation.
         "cd_nm": metrology.get("cd_nm"),
         "overlay_nm": metrology.get("overlay_nm"),
         "film_thickness_nm": metrology.get("film_thickness_nm"),
@@ -272,14 +259,11 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
         "model_version": model_version,
         "status": status,
         "created_at": inspection_at,
-        # Agent fields (None for Low / rule-only cases)
         "agent_final_action": agent_result.get("final_action") if agent_result else None,
         "agent_tool_calls": agent_result.get("tool_calls") if agent_result else None,
         "agent_trace_id": agent_result.get("trace_id") if agent_result else None,
         "agent_mode": agent_result.get("agent_mode") if agent_result else "rule_only",
     }
-    # Generate downloadable report files (CSV always; PDF best-effort) and store
-    # their object keys so they can be served via presigned URLs later.
     record["report_csv_url"] = _save_report_csv(inspection_id, record)
     record["report_pdf_url"] = _save_report_pdf(inspection_id, record)
     insert_inspection(record)
@@ -289,8 +273,6 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
             "sns/slack",
             f"{request.line_id} {request.wafer_id}: {defect_type} High risk 감지",
         )
-    # DB now holds canonical keys; the API response must return browser-usable
-    # URLs (local path or S3 presigned), matching what reads return.
     for field in ("image_url", "heatmap_url", "overlay_url", "roi_url", "report_csv_url", "report_pdf_url"):
         if record.get(field):
             record[field] = object_store.presign(record[field])
