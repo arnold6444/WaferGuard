@@ -827,8 +827,21 @@ export default function AgentView({ focusId, onFocusHandled }) {
       setSelectedId(focusId);
       setListOpen(false);
       onFocusHandled && onFocusHandled();
+      return;
     }
-  }, [focusId, rows, onFocusHandled]);
+    let cancelled = false;
+    fetch(`${API_BASE}/api/v1/inspect/${encodeURIComponent(focusId)}`)
+      .then(response => response.ok ? response.json() : null)
+      .then(record => {
+        if (cancelled || !record) return;
+        setRiskQueue(queue => queue.some(item => item.id === record.id) ? queue : [record, ...queue].slice(0, 50));
+        setSelectedId(record.id);
+        setListOpen(false);
+        onFocusHandled && onFocusHandled();
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [focusId, rows, onFocusHandled, setRiskQueue]);
 
   // the agent runs in the background after an inspection, so the trace may
   // land a few seconds later — poll until it appears (or give up quietly)

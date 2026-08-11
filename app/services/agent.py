@@ -203,6 +203,18 @@ _SYSTEM_PROMPT = """당신은 WaferGuard Fab Ops Agent입니다.
 - MLOps 에이전트는 모델 성능·drift·계측 추세를 직접 분석해 재학습 필요 여부를 판단해 돌려줍니다. 그 결론(mlops_decision)을 최종 판단에 인용해, 개별 설비 조치와 fleet-level 조치를 함께 제시하세요.
 - 단발성으로 끝낼 문제까지 무분별하게 위임하지 마세요. 반복성·drift 근거가 모였을 때만 위임합니다."""
 
+_SYSTEM_PROMPT += """
+
+최종 답변 형식(아래 제목을 모두 포함):
+## Observation
+## Possible Causes
+## Evidence
+## Recommended Checks
+## Recommended Action
+## Confidence / Uncertainty
+
+Possible Causes는 확정 원인이 아니라 검증할 후보로만 표현합니다. 공정 이벤트와 검사 결과의 시간적 연관성을 인과관계로 단정하지 마세요."""
+
 # ---------------------------------------------------------------------------
 # LangGraph State
 # ---------------------------------------------------------------------------
@@ -300,6 +312,44 @@ def _build_evidence_text(evidence: dict) -> str:
             f"{pc.get('tool_id', '-')} / "
             f"{pc.get('recipe_id', '-')}"
         )
+        related_events = pc.get("related_process_events", [])
+        if related_events:
+            lines.append("## 시간적으로 연관된 공정 이상 후보 (인과관계 아님)")
+            for event in related_events[:5]:
+                metadata = event.get("metadata", {}) if isinstance(event, dict) else {}
+                lines.append(
+                    f"  - [{event.get('severity', '?')}] {event.get('observed_at', '-')} "
+                    f"{event.get('equipment_id', '-')} / {event.get('event_type', '-')}: "
+                    f"residual={metadata.get('residual', '-')}"
+                )
+        lot_context = pc.get("lot_context", {})
+        neighbors = lot_context.get("neighboring_wafers", []) if isinstance(lot_context, dict) else []
+        if neighbors:
+            lines.append("## Lot 인접 Wafer 추세")
+            for wafer in neighbors[:5]:
+                lines.append(
+                    f"  - {wafer.get('wafer_id', '-')}: {wafer.get('risk_level', '-')} / "
+                    f"{wafer.get('defect_type', '-')} / {wafer.get('equipment_id', '-')}"
+                )
+        defect_pattern = lot_context.get("accumulated_defect_pattern", {}) if isinstance(lot_context, dict) else {}
+        if defect_pattern:
+            lines.append(f"## Lot 누적 결함 패턴: {json.dumps(defect_pattern, ensure_ascii=False)}")
+        equipment_history = pc.get("equipment_history", {})
+        if equipment_history:
+            lines.append(
+                "## 설비 검사 이력: "
+                f"총 {equipment_history.get('inspection_count', 0)}건 / "
+                f"High {equipment_history.get('high_risk_count', 0)}건 / "
+                f"최근 결함 {equipment_history.get('recent_defects', [])}"
+            )
+        recipe_context = pc.get("recipe_context", {})
+        if recipe_context:
+            lines.append(
+                "## Recipe 이력: "
+                f"{recipe_context.get('recipe_id', '-')} / "
+                f"총 {recipe_context.get('inspection_count', 0)}건 / "
+                f"High {recipe_context.get('high_risk_count', 0)}건"
+            )
 
     # Metrology values
     met = evidence.get("metrology", {})
@@ -626,11 +676,25 @@ def run(evidence: dict) -> dict:
         first_action = (
             rag_cases[0].get("action") if rag_cases and isinstance(rag_cases[0], dict) else None
         ) or "엔지니어 검토 큐에서 수동 확인"
+        process_events = (evidence.get("process_context") or {}).get("related_process_events") or []
+        event_summary = (
+            f"동일 Lot의 시간 연관 공정 이벤트 {len(process_events)}건"
+            if process_events else "동일 Lot의 시간 연관 공정 이벤트 없음"
+        )
         return (
-            f"[룰 기반 판단 — LLM 미사용] {evidence.get('defect_type', '결함')} 패턴, "
-            f"위험도 {evidence.get('risk_level', '?')} "
-            f"(score {evidence.get('risk_score', 0):.2f}, 신뢰도 {evidence.get('confidence', 0):.1%}).\n"
-            f"권장 우선 조치: {first_action}."
+            "## Observation\n"
+            f"{evidence.get('defect_type', '결함')} 패턴, 위험도 {evidence.get('risk_level', '?')} "
+            f"(score {evidence.get('risk_score', 0):.2f}).\n\n"
+            "## Possible Causes\n"
+            "공정·이송·검사 조건 중 하나와 연관됐을 가능성이 있으나 현재 증거만으로 원인을 확정할 수 없습니다.\n\n"
+            "## Evidence\n"
+            f"신뢰도 {evidence.get('confidence', 0):.1%}; {event_summary}. 시간적 연관성은 인과 증명이 아닙니다.\n\n"
+            "## Recommended Checks\n"
+            "동일 Lot 인접 wafer, 같은 장비·recipe 이력, 계측 rule hit를 함께 확인합니다.\n\n"
+            "## Recommended Action\n"
+            f"{first_action}.\n\n"
+            "## Confidence / Uncertainty\n"
+            "룰 기반 운영 보조 판단이며 실제 Fab 원인 확정에는 엔지니어 검토가 필요합니다."
         )
 
     return _drive_and_persist(initial_state, use_llm, _rule_fallback, agent_kind="inspection")

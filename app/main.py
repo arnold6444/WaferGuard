@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 
 from fastapi import FastAPI, HTTPException
@@ -18,6 +19,7 @@ from app.services.evaluation import wm811k_evaluation_report
 from app.services.handoff import generate_handoff_report, get_latest_handoff_report
 from app.services.mlops import pipeline_state, promote_latest, rollback, simulate_drift, simulate_retraining
 from app.services.pipeline import run_inspection
+from app.services.process_ops import fab_overview, process_profiles, quality_lot, quality_lots
 from app.services.rag import browse_cases, index_stats
 from app.services.rag_eval import rag_evaluation_set
 from app.services.defect_chat import chat_about_inspection, stream_chat_about_inspection
@@ -46,16 +48,29 @@ from app.services.storage import (
     init_db,
     insert_alert,
     list_inspections,
+    list_lots,
     list_pending_approvals,
+    list_process_events,
     metrics,
     record_review,
     resolve_approval,
 )
-from app.services import chamber_storage
+from app.services import chamber_storage, db
 from app.services.chamber_runtime import chamber_runtime
 
 ensure_runtime_dirs()
-init_db()
+try:
+    DATABASE_STARTUP_STATUS = db.validate_connection()
+    init_db()
+    DATABASE_STARTUP_STATUS = {**DATABASE_STARTUP_STATUS, "schema": "ready"}
+except (db.DatabaseConfigurationError, db.DatabaseConnectionError):
+    logging.getLogger(__name__).critical("Database startup validation failed", exc_info=True)
+    raise
+except Exception as exc:  # noqa: BLE001
+    selected = os.environ.get("STORAGE_BACKEND", "<missing>")
+    raise RuntimeError(
+        f"Database schema initialization failed for STORAGE_BACKEND={selected!r}: {exc}"
+    ) from exc
 
 
 def _seed_rag_index_background() -> None:
@@ -97,7 +112,11 @@ if IMAGE_BACKEND == "local":
 
 @app.get("/health")
 def health() -> dict[str, object]:
-    return {"status": "ok", "service": "waferguard-api"}
+    return {
+        "status": "ok",
+        "service": "waferguard-api",
+        "database": DATABASE_STARTUP_STATUS,
+    }
 
 
 @app.post("/api/v1/inspect")
@@ -269,6 +288,57 @@ def database_table(table_name: str, limit: int = 50, offset: int = 0) -> dict[st
     return result
 
 
+@app.get("/api/v1/fab/overview")
+def fab_status_overview() -> dict[str, object]:
+    return fab_overview()
+
+
+@app.get("/api/v1/process/profiles")
+def process_profile_list() -> list[dict[str, object]]:
+    return process_profiles()
+
+
+@app.get("/api/v1/process/events")
+def process_event_list(
+    process_step: str | None = None,
+    equipment_id: str | None = None,
+    lot_id: str | None = None,
+    wafer_id: str | None = None,
+    recipe_id: str | None = None,
+    observed_after: str | None = None,
+    observed_before: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, object]]:
+    return list_process_events(
+        process_step=process_step,
+        equipment_ids=[equipment_id] if equipment_id else None,
+        lot_id=lot_id,
+        wafer_id=wafer_id,
+        recipe_id=recipe_id,
+        observed_after=observed_after,
+        observed_before=observed_before,
+        limit=limit,
+    )
+
+
+@app.get("/api/v1/lots")
+def lot_list(status: str | None = None, limit: int = 100) -> list[dict[str, object]]:
+    return list_lots(status=status, limit=limit)
+
+
+@app.get("/api/v1/quality/lots")
+def quality_lot_list(limit: int = 500) -> dict[str, object]:
+    return quality_lots(limit=limit)
+
+
+@app.get("/api/v1/quality/lots/{lot_id}")
+def quality_lot_detail(lot_id: str) -> dict[str, object]:
+    result = quality_lot(lot_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Lot not found")
+    return result
+
+
 @app.get("/api/v1/chamber/status")
 def chamber_status() -> dict[str, object]:
     return chamber_runtime.status()
@@ -287,6 +357,11 @@ def chamber_telemetry(equipment_id: str | None = None, limit: int = 200) -> list
 @app.get("/api/v1/chamber/predictions")
 def chamber_predictions(equipment_id: str | None = None, limit: int = 200) -> list[dict[str, object]]:
     return chamber_storage.prediction_rows(equipment_id=equipment_id, limit=limit)
+
+
+@app.get("/api/v1/chamber/detections")
+def chamber_detections(prediction_id: str | None = None, limit: int = 200) -> list[dict[str, object]]:
+    return chamber_storage.detection_rows(prediction_id=prediction_id, limit=limit)
 
 
 @app.get("/api/v1/chamber/models")

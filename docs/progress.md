@@ -103,3 +103,42 @@
 - Chamber Production 승격: 명시적 promote
 - Chamber retrain: readiness gate + API/UI trigger, 자동 주기 retrain scheduler는 아직 미구현
 - 기존 wafer MLOps: simulation, Chamber MLOps: 실제 sklearn artifact/registry
+
+## 2026-08-11 — Fab Quality Ops UI/Architecture 개편
+
+- [x] 7개 최상위 메뉴와 Fab Overview 추가
+- [x] 8대 공정 profile과 Etch full-detail / 7개 demo-not-connected 구조 추가
+- [x] 기존 Chamber Live/Static, Actual/Expected, model lifecycle를 Process Monitoring으로 이동
+- [x] `process_events` schema/index/query와 Chamber anomaly projection 추가
+- [x] 검사 이전 30분의 temporal candidate와 Lot 인접 Wafer를 Agent evidence에 연결
+- [x] Runtime DB 우선 Lot summary/Wafer grid/timeline/누적 defect map 추가
+- [x] 기존 InspectionView를 Wafer Detail에서 재사용
+- [x] 기존 Vision snapshot을 Wafer Detail의 Vision Evidence와 demo fallback으로 재사용
+- [x] 기존 AgentView를 최상위 AI Analysis에서 재사용하고 DB inspection deep-link 보강
+- [x] Data & RAG browser에 `process_events` 추가
+- [x] 신규 backend test 4개 + Chamber 회귀 6개 warning-free 통과
+- [x] 확장 smoke test와 frontend production build 통과
+- [x] 실제 브라우저 사용자 흐름과 오류·경고 없는 콘솔 최종 확인
+
+현재 데이터 경계:
+
+- Etch telemetry/model은 synthetic runtime이다.
+- Inspection은 WM-811K/proxy 및 synthetic wafer 흐름이다.
+- `LOT-VISION-DEMO-042`와 Etch 외 7대 공정 profile은 demo다.
+- 누적 defect runtime 좌표는 ROI center proxy다.
+- process-to-Wafer 연결은 시간적 후보이며 인과관계가 아니다.
+
+## 2026-08-11 — Fab 실전 운영 구조 개선
+
+- [x] PostgreSQL 16 Compose, `.env.example`, 명시적 backend/startup validation
+- [x] 실제 PostgreSQL schema + Lot/telemetry/prediction/detector/event/inspection/RAG/registry CRUD 검증
+- [x] `lots`, telemetry Lot/Wafer/DQ, `anomaly_detections` schema/index/API
+- [x] 25-wafer Lot, multi-sample wafer, startup/hold/cleaning/recipe lifecycle
+- [x] missing/duplicate/reversal/gap/interval/stuck/range/state/recipe DQ gate와 aggregate event
+- [x] VALID-only prediction/training, MAD + EWMA, context threshold fallback
+- [x] equipment/recipe/lot holdout 지표, data range, readiness 기반 automatic Staging Candidate
+- [x] same-Lot/time evidence, 장비·recipe·인접 wafer·누적 defect context
+- [x] 6-section Agent output와 causal uncertainty 경계
+- [x] 독립 Fab Scenario Orchestrator의 W13~W15 RF drift → inspection E2E
+- [x] 최상위 MLOps 기본 화면을 실제 Chamber lifecycle로 변경, 기존 범용 흐름은 Legacy/Demo로 분리
+- [x] SQLite warning-free 전체 test 및 frontend production build

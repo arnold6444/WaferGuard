@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -5,6 +6,10 @@ from fastapi.testclient import TestClient
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
+
+# The smoke test is the explicit lightweight/demo path. PostgreSQL has its own
+# integration suite and is never selected implicitly here.
+os.environ.setdefault("STORAGE_BACKEND", "sqlite")
 
 from app.main import app
 
@@ -227,6 +232,26 @@ def main() -> None:
     assert db_rows.json()["total"] >= 1
     assert client.get("/api/v1/db/tables/not_a_table").status_code == 404
 
+    profiles = client.get("/api/v1/process/profiles")
+    assert profiles.status_code == 200, profiles.text
+    assert len(profiles.json()) == 8
+    assert next(item for item in profiles.json() if item["process_id"] == "etch")["connection"] == "runtime"
+
+    fab = client.get("/api/v1/fab/overview")
+    assert fab.status_code == 200, fab.text
+    assert len(fab.json()["process_status"]) == 8
+    assert fab.json()["disclaimer"]
+
+    quality = client.get("/api/v1/quality/lots")
+    assert quality.status_code == 200, quality.text
+    assert any(item["lot_id"] == "LOT-SMOKE-042" for item in quality.json()["items"])
+    quality_detail = client.get("/api/v1/quality/lots/LOT-SMOKE-042")
+    assert quality_detail.status_code == 200, quality_detail.text
+    assert quality_detail.json()["wafers"][0]["inspection"]["id"] == payload["id"]
+
+    process_events = client.get("/api/v1/process/events?process_step=Etch")
+    assert process_events.status_code == 200, process_events.text
+
     print(
         {
             "health": health.json()["status"],
@@ -246,6 +271,8 @@ def main() -> None:
             "models": len(state.json()["models"]),
             "mlops_agent": mlops_agent.json().get("agent_kind"),
             "db_tables": len(db_overview.json()["tables"]),
+            "process_profiles": len(profiles.json()),
+            "quality_lots": len(quality.json()["items"]),
         }
     )
 

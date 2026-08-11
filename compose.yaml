@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-waferguard}
+      POSTGRES_USER: ${POSTGRES_USER:-waferguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waferguard}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-waferguard} -d ${POSTGRES_DB:-waferguard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    volumes:
+      - waferguard_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  waferguard_postgres_data:

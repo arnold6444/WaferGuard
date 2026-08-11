@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -54,6 +55,8 @@ class InspectRequest(BaseModel):
     vision_sequence_label: str | None = Field(default=None, max_length=40)
     vision_first_anomaly: str | None = Field(default=None, max_length=40)
     vision_anomaly_area_ratio: float | None = Field(default=None, ge=0, le=1)
+    process_timestamp: datetime | None = None
+    inspection_timestamp: datetime | None = None
     use_llm: bool = True
 
 

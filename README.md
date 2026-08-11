@@ -2,305 +2,132 @@
 
 **반도체 Fab Quality Ops를 위한 멀티 에이전트 운영 보조 시스템**
 
-WaferGuard는 반도체 공정에서 발생한 이상 신호를 한 화면에서 확인하고, 검사 결과를 **리스크 평가 → RAG 기반 원인/조치 추천 → 엔지니어 승인 → MLOps 판단** 흐름으로 연결하는 데모/MVP입니다.
+WaferGuard는 반도체 공정 설비의 이상과 Wafer 품질 이상을 함께 모니터링하고, 공정 시계열·이미지·Metrology·과거 사례를 연결하여 이상 원인 후보와 대응안을 제안하는 Fab Quality Ops 데모 플랫폼입니다.
 
-현재 저장소는 실제 Fab 설비를 직접 제어하는 시스템이 아니라, **샘플·프록시 데이터와 시뮬레이션을 이용해 운영 의사결정 흐름을 검증하는 구조**입니다.
-
-- Chamber Resistance는 synthetic multivariate telemetry를 DB·실제 sklearn 모델·residual 이상탐지와 연결한 **Live** 모드와 기존 `USE_TIME` 기반 **Static Demo**를 함께 제공합니다.
-- Wafer Vision은 외부 `wafer_particle` 분석 결과 snapshot을 표시하고 선택한 evidence를 기존 Inspection Agent로 전달합니다.
-- 기존 wafer MLOps는 workflow simulation이며, Chamber MLOps는 별도 registry/artifact에서 실제 sklearn 학습을 수행합니다.
+현재 저장소는 실제 Fab 설비를 직접 제어하는 시스템이 아니라, **샘플·프록시 데이터와 시뮬레이션을 이용해 운영 의사결정 흐름을 검증하는 구조**입니다. Lot lifecycle, Data Quality Gate, 실제 sklearn Expected Resistance 모델, MAD/EWMA detector, 검사·Agent 근거를 PostgreSQL에 연결하며, Vision 결과는 정적 스냅샷에서 선택한 근거를 기존 Inspection Agent 파이프라인으로 전달합니다.
 
 ## 📝 Overview
 
+WaferGuard의 핵심은 결함을 단순히 분류하는 데서 끝내지 않고, 탐지 이후에 필요한 운영 판단을 하나의 워크플로로 묶는 것입니다.
+
 ```text
-Chamber Resistance Live / Static Demo
-            +
-Wafer Vision snapshot
-            │
-            ▼
-      FastAPI Backend
-            │
-            ├── Chamber DB / sklearn lifecycle
-            │
-            └── POST /api/v1/inspect
-                     │
-                     ▼
-          Risk + Metrology / Vision rules
-                     │
-                     ▼
-       Inspection Agent + RAG + Action Card
-                     │
-                     ▼
-          Human approval / review
-                     │
-            ┌────────┴────────┐
-            ▼                 ▼
-      RAG feedback       MLOps delegation
+Fab Overview
+        ↓
+Process Monitoring / Etch anomaly
+        +
+Wafer Quality / Lot · Timeline · Defect Map
+        ↓
+POST /api/v1/inspect
+        ↓
+Risk + Metrology / Vision rules
+        ↓
+Inspection Agent + RAG + Action Card
+        ↓
+Human approval / review
+        ↓
+RAG knowledge feedback + MLOps delegation
 ```
 
 ### ⭐️ Key Features
 
-- **Chamber Resistance AI**: recipe/setpoint, RF, pressure, gas, temperature, cleaning history, use history를 가진 연속 synthetic telemetry로 실제 Gradient Boosting pipeline을 학습하고 Actual/Expected residual을 저장·탐지합니다.
-- **Resistance Static Demo**: 기존 `DATE`, `EQP`, `USE_TIME`, `RESISTANCE` offline 분석 결과를 유지합니다.
-- **Wafer Vision AI**: `wafer_particle` 분석 서버에서 미리 생성한 통계/정상 전용 AI 비교 결과와 대표 히트맵을 탐색합니다.
-- **Live Inspection**: wafer/process 입력을 받아 리스크 점수, metrology/vision rule hit, Action Card, 이미지 근거를 생성합니다.
+- **Fab Overview**: 8대 공정 상태, Active Lot, connected equipment, warning/critical, 최근 이상 후보를 한 화면에서 표시합니다. 실제 값이 없는 공정은 `Demo profile`로 구분합니다.
+- **Process Monitoring**: 25-wafer Lot lifecycle, wafer당 다중 telemetry, startup/hold/cleaning 상태, recipe/setpoint, RF, pressure, gas, temperature와 Actual/Expected residual을 함께 표시합니다.
+- **Wafer Quality**: 검사 DB를 우선 사용하고 비어 있을 때 기존 Vision snapshot demo를 사용해 Lot 상태판, Wafer timeline, 누적 defect map, Wafer Detail을 제공합니다.
+- **Vision Evidence**: `wafer_particle`의 저장된 통계/AI 비교 결과와 대표 히트맵을 독립 제품이 아니라 Wafer Detail의 proxy evidence로 사용합니다.
+- **Data Quality / Detector Layer**: `VALID`만 예측·학습에 사용하고 `WARNING/REJECT`는 모델에서 차단합니다. MAD primary와 EWMA secondary 결과를 `anomaly_detections`에 보존합니다.
+- **Process Event Layer**: Chamber anomaly를 기존 테이블에서 삭제하지 않고 `process_events`로 투영하여 같은 Lot·검사 이전 30분의 시간적 연관 후보를 조회합니다.
 - **Inspection Agent**: LangGraph 기반 도구 호출 루프로 과거 사례와 공정 근거를 조회하고 추정 원인과 대응 방안을 제안합니다.
-- **Human-in-the-Loop RAG**: `approved` 또는 `false_alarm`으로 확정된 엔지니어 review만 RAG knowledge로 다시 저장합니다.
-- **MLOps Agent**: 기존 wafer model/drift/retrain/promote/rollback workflow를 시뮬레이션하고 high-risk action은 approval gate를 거칩니다.
-- **Data & RAG Console**: 검사 이력, Agent trace, approval, 모델/드리프트, RAG 문서 등 운영 DB를 조회합니다.
+- **Human-in-the-Loop RAG**: 엔지니어 리뷰 중 `approved` 또는 `false_alarm`으로 확정된 사례만 RAG 지식으로 다시 저장합니다. 미확정 `needs_review` 상태는 학습 사례로 저장하지 않습니다.
+- **MLOps Agent**: drift/model 상태를 확인하고 재학습 권고, 승인 요청, promote/rollback 시뮬레이션을 수행합니다. Inspection Agent에서 fleet-level 문제로 판단되면 MLOps Agent로 위임할 수 있습니다.
+- **Approval Gate**: critical alert나 retraining 같은 high-risk tool action은 pending approval에 저장한 뒤 엔지니어 승인/거절로 처리합니다.
+- **Data & RAG Console**: 검사 이력, Agent trace, approval, 모델/드리프트, RAG 문서 등 운영 DB를 읽어볼 수 있습니다.
 
----
+## 🎯 Demo
 
-## 📡 Chamber Resistance AI
+### 🏭 Fab Overview / Process Monitoring
 
-Resistance 화면은 **Live / Static Demo** 두 모드입니다.
+![USE TIME 기반 챔버 저항 이상탐지 대시보드](docs/assets/chamber-dashboard-preview.png)
 
-### Live
+Etch Monitoring은 `Overview · Equipment · Process Trend · Anomaly · Model`로 구성되며, 기존 Resistance 화면의 두 모드를 보존합니다.
 
-```text
-configs/chamber.yaml
-        │
-        ▼
-EtchTelemetryGenerator
-(chamber_generator.py)
-        │
-        ▼
-Multivariate telemetry
-Pressure / Source RF / Bias RF / Gas / Temp
-Recipe / Use time / Since clean / Wafer count
-        │
-        ▼
-chamber_telemetry
-        │
-        ├── no Production model
-        │      └─ clean warm-up → 실제 sklearn fit → Production v1
-        │
-        └── Production model 있음
-               └─ predict Expected Resistance
-                         │
-                 Actual - Expected
-                         │
-                         ▼
-                     Residual
-                         │
-                         ▼
-                chamber_predictions
-                         │
-                         ▼
-                 React Live Dashboard
+- **Live**: `configs/chamber.yaml`의 recipe/setpoint를 기준으로 여러 장비의 연속 telemetry를 생성합니다. `running`/`quality=good` row로 실제 sklearn pipeline을 bootstrap하고, Production model로 Expected Resistance와 residual/anomaly를 DB에 저장합니다.
+- **Static Demo**: 기존 `DATE`, `EQP`, `USE_TIME`, `RESISTANCE` 3,000행 offline 분석과 EQP10/EQP55 결과를 그대로 유지합니다.
+
+로컬 Live 데이터를 빠르게 만들려면 backend와 별도 터미널에서 실행합니다.
+
+```bash
+python scripts/run_chamber_stream.py --equipment-count 3 --interval 0 --samples 180
 ```
 
-주요 구현 파일:
+일반 실행은 `--interval 1`을 사용합니다. `--anomaly rf_power_drift --anomaly-after 140`처럼 원인 parameter 이상을 주입할 수 있습니다. 생성되는 range, coefficient, feature importance는 pipeline 검증용 synthetic 값이며 실제 Fab spec이나 물리 계수가 아닙니다.
 
-- `configs/chamber.yaml`: recipe/setpoint, cleaning, model threshold/config
-- `app/services/chamber_generator.py`: stateful synthetic Etch telemetry
-- `app/services/chamber_storage.py`: Chamber DB access
-- `app/services/chamber_training.py`: sklearn fit/evaluation/joblib artifact
-- `app/services/chamber_runtime.py`: warm-up/inference/readiness/retrain/promote
-- `scripts/run_chamber_stream.py`: local stream runner
-- `frontend/src/ChamberView.jsx`: Live/Static UI
-
-지원 synthetic anomaly:
-
-- `resistance_spike`
-- `resistance_drift`
-- `pressure_drift`
-- `rf_power_drift`
-- `gas_flow_drift`
-- `temperature_drift`
-- `stuck_sensor`
-- `step_change`
-
-> simulator range, coefficient, feature importance는 실제 Fab calibration 값이나 물리 법칙을 의미하지 않습니다. pipeline/lifecycle 검증용 synthetic 값입니다.
-
-### Model / validation
-
-- Pipeline: `ColumnTransformer + OneHotEncoder(handle_unknown="ignore") + GradientBoostingRegressor(loss="huber")`
-- Validation: 과거 → 미래 time-based holdout
-- Metrics: MAE / RMSE
-- Comparison: 동일 holdout에서 multivariate candidate vs `USE_TIME` only baseline vs 기존 Production
-- Artifact: `runtime/models/chamber/resistance-vN.joblib`
-- Online detection: `abs(Actual - Expected)` residual threshold
-
-### Chamber lifecycle
-
-```text
-No Production
-    │
-    └─ clean rows 충분
-           ↓
-       bootstrap fit
-           ↓
-      Production v1
-           │
-           ▼
-      Live inference
-           │
-           ▼
- retraining readiness 계산
-(new clean rows + recent error + elapsed time)
-           │
-           │ API/UI retrain trigger
-           ▼
-      Candidate fit
-           │
-   Production 비교 통과
-           ▼
-         Staging
-           │
-      explicit Promote
-           ▼
-new Production / old Archived
-```
-
-중요한 현재 경계:
-
-- **readiness 계산은 자동**으로 할 수 있지만, readiness를 주기적으로 검사해 `retrain()`을 직접 실행하는 Chamber scheduler는 아직 없습니다.
-- 실제 retrain은 `/api/v1/chamber/retrain` 또는 Live UI action으로 시작합니다.
-- Production promotion도 명시적 API/UI action입니다.
-- 기존 `/api/v1/automation/tick` / Lambda + EventBridge는 기존 wafer/운영 workflow용이며 Chamber retraining scheduler와 동일하지 않습니다.
-
-### Static Demo
-
-기존 `DATE`, `EQP`, `USE_TIME`, `RESISTANCE` 3,000행 offline 분석과 EQP10/EQP55 결과는 그대로 유지합니다.
+기존 static JSON 재생성은 계속 지원합니다.
 
 ```bash
 python scripts/build_chamber_dashboard_data.py --input "/path/to/sample.csv" --output "frontend/src/data/chamberSample.json"
 ```
 
----
+### 🧭 Wafer Quality / Vision Evidence
 
-## 🖼️ Wafer Vision AI
-
-`Chamber AI`의 Vision 탭은 `frontend/src/data/waferVisionSample.json`과 대표 이미지를 사용합니다.
+`Wafer Quality`는 runtime inspection DB를 Lot/Wafer 단위로 집계합니다. 데이터가 없을 때는 `frontend/src/data/waferVisionSample.json`과 대표 이미지를 `Demo / Proxy`로 명시해 상태판·timeline·누적 map·상세 evidence를 구성합니다.
 
 - 통계 방식: 픽셀 중앙값·MAD 기반 결과
 - 정상 전용 AI: ResNet18 feature + PaDiM-style 결과
-- `statistical` / `ai` / `comparison` 모드는 **미리 계산된 결과의 표시 기준을 전환**합니다.
-- 현재 WaferGuard React 안에서 Vision 모델을 실시간 추론하지 않습니다.
-- 현재 snapshot: 3,000 images / 100 chambers / 300×300 px
+- 비교 모드: 두 방식의 **미리 계산된 결과 중 어떤 기준을 화면에 표시할지 전환**합니다. 현재 WaferGuard 프론트엔드 안에서 모델 추론을 실시간으로 다시 수행하지는 않습니다.
+- 현재 스냅샷: 3,000 images / 100 chambers / 300×300 px
 - 샘플 이상 챔버: CH-007, CH-047, CH-061
+- 샘플 이상 이미지: 51장
 
-선택한 챔버에서 `Inspection Agent에 전달`을 누르면 `vision_*` evidence가 `POST /api/v1/inspect`로 전달됩니다.
+Wafer Detail의 Vision Evidence에서 `Inspection Agent에 전달`을 누르면 통계/AI 점수, 방향, 시점, 이상 면적을 전용 `vision_*` 필드로 `POST /api/v1/inspect`에 보내고 최상위 `AI Analysis` 화면으로 연결합니다.
 
-현재 sample Vision rule:
+현재 Action Card의 Vision rule은 샘플 기준으로 다음 임계값을 사용합니다.
 
-- 통계 `>= 2.0` + AI `>= 50.0` → Critical
-- 둘 중 하나만 위 기준 초과 → Warning
-- 통계 `>= 1.2` 또는 AI `>= 35.0` → caution-level Warning
+- 통계 `>= 2.0` + AI `>= 50.0`: Critical evidence
+- 둘 중 하나만 위 기준 초과: Warning
+- 통계 `>= 1.2` 또는 AI `>= 35.0`: Caution-level warning
 
-> 위 값은 샘플 기준이며 실제 Fab spec/control limit가 아닙니다.
+이 값은 **실제 Fab spec/control limit가 아니라 현재 샘플용 임계값**입니다.
 
-Vision snapshot 재생성:
+`wafer_particle` 분석 서버가 별도로 실행 중이라면 비교 결과와 대표 자산을 다시 생성할 수 있습니다.
 
 ```bash
 python scripts/build_wafer_vision_dashboard_data.py --base-url http://127.0.0.1:<port> --dataset-id <dataset-id>
 ```
 
-`wafer_particle` 서버 전체와 원본 dataset은 이 저장소에 포함하지 않습니다.
+> `wafer_particle` 분석 서버 전체는 이 저장소에 포함되어 있지 않습니다. WaferGuard에는 생성된 결과 스냅샷과 대표 자산만 포함합니다.
 
----
+### 🔎 Wafer Detail / Inspection
 
-## 🤖 Inspection Agent / RAG
+![실시간 검사 콘솔](docs/assets/dashboard.png)
 
-```text
-Inspection 생성
-     │
-     ▼
-Risk + Process + Metrology + Vision evidence
-     │
-     ▼
-Inspection Agent (LangGraph)
-     │
-     ├── RAG 과거 사례 검색
-     ├── DB / Image / MLOps tools
-     └── 원인/조치 판단
-             │
-             ▼
-         Action Card
-             │
-             ▼
-        Engineer Review
-             │
-       ┌─────┴─────────┐
-       ▼               ▼
-approved/false_alarm  needs_review
-       │               │
-       ▼               └─ RAG 저장 안 함
-RAG knowledge feedback
-```
+- `POST /api/v1/inspect`로 검사 건을 생성합니다.
+- wafer map / heatmap / overlay / ROI와 공정·metrology 근거를 함께 저장합니다.
+- Medium/High 리스크 케이스는 Agent 분석 및 review workflow로 연결됩니다.
+- 검사 건별 Agent trace 조회, 재실행, 근거 기반 chat, SSE streaming을 지원합니다.
 
-- `approved` / `false_alarm` 확정 사례만 검색 가능한 RAG knowledge로 저장합니다.
-- `needs_review`는 미확정 상태이므로 knowledge feedback 대상이 아닙니다.
+### 🤖 AI Analysis / Inspection Agent
 
----
+![Inspection Agent 판단](docs/assets/agent_inspection.png)
 
-## 📈 기존 Wafer MLOps Agent
+- LangGraph 기반 Agent가 RAG와 도구를 사용해 검사 근거를 조회합니다.
+- 과거 사례, metrology/vision rule hit, 같은 Lot의 인접 Wafer, 검사 이전 30분의 process event 후보를 바탕으로 Action Card와 권장 조치를 구성합니다.
+- 엔지니어가 `approved` 또는 `false_alarm`으로 결론을 내린 사례는 다시 검색 가능한 지식으로 저장됩니다.
 
-기존 WaferGuard MLOps Agent는 model registry와 drift history를 확인하고 retrain/promote/rollback workflow를 검증하는 **simulation**입니다.
+### 📈 MLOps
 
-- `model_registry`
-- `drift_events`
-- `retraining_jobs`
-- approval gate
-- `/api/v1/automation/tick`
-- AWS Lambda + EventBridge automation
+![MLOps 위임 & 자율성](docs/assets/agent_mlops.png)
 
-이 흐름은 Chamber의 실제 sklearn `chamber_model_registry`와 분리되어 있습니다.
+- 최상위 기본 화면은 실제 Chamber Production/Staging registry, DQ, MAD/EWMA, 장비·recipe·Lot holdout 지표와 학습 데이터 구간입니다.
+- readiness가 충족되면 scheduler/stream이 Staging Candidate까지만 자동 학습하며 Production 승격은 명시적 사람 호출만 허용합니다.
+- 기존 wafer 모델 registry, drift, MLOps Agent는 `Legacy / Demo` 탭의 workflow simulation으로 유지됩니다.
+- high-risk action은 approval gate를 통과해야 실행됩니다.
+- 자동화 tick은 `/api/v1/automation/tick`으로 실행하며 AWS에서는 Lambda + EventBridge로 호출할 수 있습니다.
 
----
+## ✍️ Agentic Flow
 
-## 🗄️ DB / Storage
+![에이전트 아키텍처](docs/assets/agent_architecture.png)
 
-WaferGuard는 기능별로 별도 DB 서버를 만들지 않고 **하나의 runtime DB backend 안에서 table을 분리**합니다.
-
-### Local
-
-```text
-SQLite
-└─ outputs/waferguard.db
-```
-
-### AWS / 운영 전환
-
-```text
-STORAGE_BACKEND=postgres
-        ↓
-PostgreSQL / RDS
-```
-
-### DB tables
-
-기존 workflow 9개:
-
-- `inspections`
-- `model_registry`
-- `drift_events`
-- `retraining_jobs`
-- `alerts`
-- `handoff_reports`
-- `agent_traces`
-- `pending_approvals`
-- `rag_documents`
-
-Chamber 3개:
-
-- `chamber_telemetry`: 원본 synthetic process telemetry
-- `chamber_predictions`: Actual/Expected/residual/anomaly
-- `chamber_model_registry`: Chamber model version/stage/metrics/artifact metadata
-
-### File/Object storage
-
-```text
-이미지 / CSV / PDF / report
-    ├─ local: outputs/
-    └─ AWS: S3 (IMAGE_BACKEND=s3)
-
-Chamber sklearn model
-    └─ runtime/models/chamber/*.joblib
-```
-
----
+> 위 다이어그램은 기존 Inspection/MLOps Agent 흐름을 설명합니다. 최신 Chamber Resistance/Vision AI는 이 흐름의 **상류 evidence source**로 연결됩니다.
 
 ## 🧑‍💻 Tech Stack
 
@@ -310,71 +137,52 @@ Chamber sklearn model
 | LLM | GPT-4o-mini via Luxia Gateway · text/image 입력 · tool calling |
 | RAG | Luxia embedding 1024-d · cosine search · rerank · DB BLOB embedding |
 | Frontend | React 19 · Vite 7 · Recharts 3 |
-| Runtime DB | SQLite / PostgreSQL(RDS) |
-| Object Storage | local `outputs/` / S3 |
-| Chamber ML | pandas · scikit-learn · GradientBoosting · joblib · PyYAML |
-| AWS | boto3 · S3 · RDS · Secrets Manager · SNS · Lambda/EventBridge |
-
----
+| Runtime DB | 표준 로컬/운영 PostgreSQL 16 · 명시적 unit test/demo만 SQLite |
+| Object Storage | 기본 local `outputs/` / `IMAGE_BACKEND=s3` 시 S3 |
+| Workflow tables | Lot/Inspection/RAG/Agent workflow 11개 + Chamber 4개 = 15개 |
+| Chamber ML | pandas · scikit-learn Pipeline/GradientBoosting · joblib · PyYAML |
+| AWS integration | boto3 · S3 · RDS · Secrets Manager · SNS · Lambda/EventBridge |
 
 ## 🛜 AWS Deployment
 
-WaferGuard는 로컬 모드를 기본값으로 유지하면서 환경변수로 AWS backend를 선택할 수 있습니다.
+WaferGuard는 로컬 PostgreSQL·로컬 object storage 구성을 표준으로 두고, 환경변수로 RDS/S3 backend를 선택할 수 있습니다.
+
+![AWS 아키텍처](docs/assets/aws-architecture.png)
 
 | AWS 서비스 | 역할 | 코드 연결 |
 |------------|------|-----------|
-| EC2 | FastAPI + production frontend | `app.main` / `frontend/dist` |
-| S3 | 이미지·CSV·PDF object storage | `app/services/object_store.py` |
-| RDS PostgreSQL | runtime DB | `app/services/db.py` |
-| Secrets Manager | environment secret | `app/services/config.py`, `app/services/aws.py` |
-| SNS | high-risk alert fan-out | `app/services/aws.py` |
-| CloudWatch | 운영 로그/메트릭 | deployment/runtime |
-| Lambda + EventBridge | 기존 automation tick | `infra/lambda/automation_tick.py` |
+| **EC2** | FastAPI + production frontend 실행 | `app.main` / `frontend/dist` |
+| **S3** | 이미지·CSV·PDF object storage | `app/services/object_store.py` |
+| **RDS (PostgreSQL)** | workflow DB | `app/services/db.py` |
+| **Secrets Manager** | 환경 secret 로딩 | `app/services/config.py`, `app/services/aws.py` |
+| **SNS** | high-risk alert fan-out | `app/services/aws.py` + alert workflow |
+| **CloudWatch** | 배포 환경 로그/메트릭 관찰 | uvicorn/AWS 운영 구성 |
+| **Lambda + EventBridge** | 주기적인 automation tick 호출 | `infra/lambda/automation_tick.py` |
 
-상세 내용은 `docs/AWS_Deploy_Guide.md`와 `docs/AWS_*.md`를 참고하세요.
-
----
+상세 배포 절차는 [`docs/AWS_Deploy_Guide.md`](docs/AWS_Deploy_Guide.md), 마이그레이션 및 비용 관련 내용은 [`docs/`](docs/)의 AWS 문서를 참고하세요.
 
 ## Prerequisites
 
 | 도구 | 권장/최소 버전 |
 |------|----------------|
 | Python | 3.11 |
-| Node.js | 20.19+ 또는 22.12+ |
-| npm | Node.js에 포함된 최신 npm 권장 |
-
----
+| Node.js | **20.19+ 또는 22.12+** (현재 Vite 7 기준) |
+| npm | 위 Node.js 설치에 포함된 최신 npm 권장 |
 
 ## Local Demo Guide
 
-### 1. Backend dependencies
+### 1. Clone & Install Backend Dependencies
 
 ```bash
 git clone https://github.com/arnold6444/WaferGuard.git
 cd WaferGuard
 
-python -m venv .venv
-```
-
-Windows에서 Python 3.11을 명시하려면:
-
-```powershell
-py -3.11 -m venv .venv
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-Conda를 쓰는 경우:
-
-```bash
 conda create -n waferguard python=3.11 -y
 conda activate waferguard
 pip install -r requirements.txt
 ```
 
-### 2. Frontend dependencies
+### 2. Install Frontend Dependencies
 
 ```bash
 cd frontend
@@ -382,39 +190,43 @@ npm install
 cd ..
 ```
 
-PowerShell execution policy 때문에 `npm.ps1`이 막히면 현재 터미널에 한해 다음을 사용할 수 있습니다.
+### 3. Start PostgreSQL and Configure Runtime
+
+PostgreSQL backend 선택은 필수이며 연결에 실패해도 SQLite로 자동 fallback하지 않습니다.
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-npm run dev
+Copy-Item .env.example .env
+docker compose up -d postgres
+docker compose ps
 ```
 
-또는 `npm.cmd run dev`를 사용할 수 있습니다.
+호스트 5432가 이미 사용 중이면 `.env`의 `POSTGRES_PORT`와 `RDS_PORT`를 모두 `5433`으로 변경합니다. SQLite는 unit test나 가벼운 명시적 demo에서만 `STORAGE_BACKEND=sqlite`로 선택합니다.
 
-### 3. Frontend API URL
+### 4. Configure LLM Access (optional)
 
-`frontend/.env.local`:
+실제 Luxia LLM 호출을 사용하려면 프로젝트 루트에 `.env`를 만듭니다.
 
-```text
-VITE_API_BASE_URL=http://127.0.0.1:8000
-```
-
-### 4. LLM Access (optional)
-
-프로젝트 루트 `.env`:
-
-```text
+```bash
 LUXIA_API_KEY=발급받은_키
 ```
 
-키가 없어도 앱은 기동되며 fallback/stub 경로를 사용할 수 있습니다.
+`LUXIA_API_KEY`가 없어도 앱은 기동되며, Luxia client는 stub/fallback 경로를 사용합니다. 실제 Agent LLM 응답을 확인하려면 API 키가 필요합니다.
 
-### 5. 실행
+### 5. Configure Frontend API URL
+
+`frontend/.env.local`을 만들면 Windows PowerShell/bash 구분 없이 같은 방식으로 실행할 수 있습니다.
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+### 6. Run Backend & Frontend
 
 **터미널 1 — Backend**
 
 ```bash
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+conda activate waferguard
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 **터미널 2 — Frontend**
@@ -424,24 +236,10 @@ cd frontend
 npm run dev
 ```
 
-**터미널 3 — Chamber Live stream**
-
-빠른 테스트:
+**터미널 3 — Chamber Live stream (선택)**
 
 ```bash
-python scripts/run_chamber_stream.py --equipment-count 3 --interval 0 --samples 180
-```
-
-1초 간격 demo:
-
-```bash
-python scripts/run_chamber_stream.py --equipment-count 3 --interval 1 --samples 500
-```
-
-RF drift injection:
-
-```bash
-python scripts/run_chamber_stream.py --equipment-count 3 --interval 1 --samples 200 --anomaly rf_power_drift --anomaly-after 30
+python scripts/run_chamber_stream.py --equipment-count 3 --interval 1
 ```
 
 접속 주소:
@@ -452,92 +250,110 @@ API docs  : http://127.0.0.1:8000/docs
 Health    : http://127.0.0.1:8000/health
 ```
 
-`/health` 예시:
+현재 `/health` 응답:
 
 ```json
-{"status":"ok","service":"waferguard-api"}
+{"status":"ok","service":"waferguard-api","database":{"backend":"postgres","status":"connected"}}
 ```
 
-### 6. Smoke / test / build
+### 7. Synthetic Fab Scenario
+
+Generator와 Inspection은 직접 의존하지 않으며 별도 orchestrator가 wafer completion과 검사 lag를 연결합니다.
 
 ```bash
+python scripts/run_fab_scenario.py --wafer-samples 4 --lag-minutes 5
+```
+
+이 시나리오는 W13~W15에 RF drift와 Edge-Loc 검사 열화를 함께 생성하지만, 시간적 연관을 실제 인과관계로 주장하지 않습니다.
+
+### 8. Smoke Test & Build
+
+`smoke_test.py`는 실행 중인 서버에 HTTP 요청을 보내는 방식이 아니라 **FastAPI `TestClient`로 앱을 직접 import해서 검사**하므로 백엔드 서버를 따로 띄워둘 필요가 없습니다.
+
+```bash
+conda activate waferguard
 python scripts/smoke_test.py
-python -m pytest tests/test_chamber.py -q
-python -m compileall -q app scripts tests
 
 cd frontend
 npm run build
 ```
 
----
-
 ## 주요 API
 
 | Method | Endpoint | 역할 |
 |--------|----------|------|
-| GET | `/health` | service health |
+| GET | `/health` | 서비스 상태 |
 | POST | `/api/v1/inspect` | 검사 생성 + risk/action card + agent workflow |
 | GET | `/api/v1/inspections` | 최근 검사 목록 |
 | GET | `/api/v1/inspect/{id}/trace` | 검사 Agent trace |
 | POST | `/api/v1/inspect/{id}/chat/stream` | 검사 근거 기반 streaming chat |
 | POST | `/api/v1/review/{id}` | 엔지니어 review + 확정 사례 RAG 저장 |
-| GET/POST | `/api/v1/automation/status`, `/api/v1/automation/tick` | 기존 automation 상태/실행 |
-| GET | `/api/v1/rag/search` | RAG 검색 |
-| GET | `/api/v1/db/overview` | runtime DB 개요 |
-| GET | `/api/v1/chamber/status` | warm-up/Production/readiness |
+| GET/POST | `/api/v1/automation/status`, `/api/v1/automation/tick` | 자동화 상태/실행 |
+| GET | `/api/v1/rag/search` | 과거 사례 검색 |
+| GET | `/api/v1/db/overview` | workflow DB 개요 |
+| GET | `/api/v1/fab/overview` | runtime + demo 출처를 포함한 Fab Overview read model |
+| GET | `/api/v1/process/profiles` | 8대 공정 parameter/profile metadata |
+| GET | `/api/v1/process/events` | 공통 process event와 시간 범위 조회 |
+| GET | `/api/v1/lots` | Lot 원장/status 조회 |
+| GET | `/api/v1/quality/lots` | 검사 DB의 Lot 요약 |
+| GET | `/api/v1/quality/lots/{lot_id}` | Wafer timeline/detail 집계 |
+| GET | `/api/v1/chamber/status` | warm-up/Production/readiness 상태 |
 | GET | `/api/v1/chamber/equipment` | 장비별 최신 상태 |
-| GET | `/api/v1/chamber/telemetry` | Chamber telemetry |
-| GET | `/api/v1/chamber/predictions` | Actual/Expected/residual/anomaly |
+| GET | `/api/v1/chamber/telemetry` | Chamber telemetry 조회 |
+| GET | `/api/v1/chamber/predictions` | Actual/Expected/residual/anomaly 조회 |
+| GET | `/api/v1/chamber/detections` | MAD/EWMA detector별 결과 조회 |
 | GET | `/api/v1/chamber/models` | Chamber model registry |
-| POST | `/api/v1/chamber/retrain` | readiness gate 후 실제 Candidate fit |
-| POST | `/api/v1/chamber/models/{version}/promote` | artifact 검증 후 Production 승격 |
-| GET | `/api/v1/mlops/state` | 기존 wafer MLOps state |
-| POST | `/api/v1/mlops/agent/run` | MLOps Agent |
-| POST | `/api/v1/mlops/drift` | drift simulation |
-| POST | `/api/v1/mlops/retrain` | retrain simulation |
-| POST | `/api/v1/models/promote` | wafer staging promote |
-| POST | `/api/v1/models/rollback` | wafer rollback |
-| GET | `/api/v1/pending-approvals` | 승인 대기 action |
+| POST | `/api/v1/chamber/retrain` | readiness gate 후 실제 Candidate 학습 (`force=true` demo override) |
+| POST | `/api/v1/chamber/models/{version}/promote` | artifact 검증 후 명시적 Production 승격 |
+| GET | `/api/v1/mlops/state` | MLOps 상태 |
+| POST | `/api/v1/mlops/agent/run` | MLOps Agent 실행 |
+| POST | `/api/v1/mlops/drift` | drift 시뮬레이션 |
+| POST | `/api/v1/mlops/retrain` | retraining 시뮬레이션 |
+| POST | `/api/v1/models/promote` | staging model promote |
+| POST | `/api/v1/models/rollback` | model rollback |
+| GET | `/api/v1/pending-approvals` | 승인 대기 action 목록 |
 
 전체 API 계약은 실행 후 FastAPI Swagger(`/docs`)에서 확인할 수 있습니다.
-
----
 
 ## Project Structure
 
 ```text
 app/
-  main.py
+  main.py                    # FastAPI routes + frontend dist mount
   services/
-    schemas.py
-    pipeline.py
-    risk.py
-    action_card.py
-    agent.py
-    tools.py
-    rag.py
-    defect_chat.py
-    mlops.py
-    chamber_generator.py
-    chamber_storage.py
-    chamber_training.py
-    chamber_runtime.py
-    automation.py
-    storage.py
-    db.py
-    object_store.py
-    luxia_client.py
-    aws.py
-    synthetic_wafer.py
-  data/
-
-configs/
-  chamber.yaml
+    schemas.py               # Pydantic request models
+    pipeline.py              # POST /api/v1/inspect 핵심 흐름
+    risk.py                  # risk score / level
+    action_card.py           # metrology + vision rules / Action Card
+    agent.py                 # Inspection/MLOps LangGraph agent
+    tools.py                 # Agent tool registry
+    rag.py                   # RAG index / case retrieval
+    defect_chat.py           # inspection chat + SSE streaming
+    mlops.py                 # drift/retrain/promote/rollback simulation
+    chamber_generator.py     # stateful multivariate Etch simulator
+    chamber_storage.py       # Chamber telemetry/prediction/model DB access
+    chamber_training.py      # sklearn fit/evaluation/joblib artifact
+    chamber_runtime.py       # warm-up/inference/retrain/promote lifecycle
+    chamber_data_quality.py  # VALID/WARNING/REJECT + aggregate events
+    fab_scenario.py          # Generator → inspection 분리 orchestration
+    process_ops.py           # process profile/event/Fab/Quality read model
+    automation.py            # periodic automation tick
+    storage.py               # workflow persistence / DB browser
+    db.py                    # SQLite ↔ PostgreSQL abstraction
+    object_store.py          # local outputs ↔ S3 abstraction
+    luxia_client.py          # Luxia chat/embedding/rerank client
+    aws.py                   # AWS clients
+    synthetic_wafer.py       # wafer map / heatmap / ROI generation
+  data/                      # RAG/evaluation fixture + WM-811K subset
 
 frontend/
-  src/App.jsx
-  src/ChamberView.jsx
-  src/WaferVisionView.jsx
+  src/App.jsx                # 7개 Fab Quality Ops navigation
+  src/FabOverview.jsx
+  src/ProcessMonitoring/     # Etch full detail + 7 demo profiles
+  src/WaferQuality/          # Lot/Grid/Timeline/Defect Map/Detail
+  src/AIAnalysis/            # 기존 Inspection Agent 통합 화면
+  src/ChamberView.jsx        # 보존된 Live/Static Resistance 분석
+  src/WaferVisionView.jsx    # Wafer Detail vision evidence + Agent handoff
   src/InspectionWorkspace.jsx
   src/MlopsWorkspace.jsx
   src/DatabaseView.jsx
@@ -546,35 +362,33 @@ frontend/
   src/data/waferVisionSample.json
 
 scripts/
-  run_chamber_stream.py
-  build_chamber_dashboard_data.py
-  build_wafer_vision_dashboard_data.py
-  build_wm811k_subset.py
   smoke_test.py
+  build_wm811k_subset.py
+  build_chamber_dashboard_data.py
+  run_chamber_stream.py
+  run_fab_scenario.py
+  build_wafer_vision_dashboard_data.py
 
 infra/
   lambda/automation_tick.py
 
-tests/
-  test_chamber.py
+docs/
+  spec.md
+  decisions.md
+  progress.md
+  AWS_*.md
 
-outputs/                     # SQLite DB / local images / reports (gitignore)
-runtime/models/chamber/      # Chamber sklearn artifacts (gitignore)
+outputs/                     # local runtime DB/images/reports (gitignore)
+runtime/models/chamber/      # fitted Chamber pipeline artifacts (gitignore)
 ```
-
----
 
 ## 현재 구현 경계
 
-- Chamber Resistance Live는 **synthetic stream → DB → 실제 sklearn fit/inference → residual anomaly → Staging/Production lifecycle**을 연결합니다.
+- Fab Overview는 Etch/Inspection runtime 값이 있으면 사용하고, 연결되지 않은 공정은 명시적인 `Demo profile` 상태를 사용합니다.
+- Chamber Resistance Live는 synthetic Lot/Wafer lifecycle, 엄격한 DQ gate, 실제 sklearn fit/inference, MAD/EWMA, Staging/Production lifecycle을 연결합니다. 자동 흐름은 Candidate를 승격하지 않습니다.
 - 기존 CSV 기반 `USE_TIME` 분석은 Static Demo로 유지됩니다.
-- Wafer Vision은 외부 `wafer_particle` 결과 snapshot을 사용합니다.
-- Vision → Inspection Agent API handoff는 구현되어 있습니다.
-- 실제 장비 ingest, 실제 Fab control limit, 자동 장비 제어, production 성능 보장은 범위 밖입니다.
-- 기존 wafer MLOps는 simulation이고 Chamber retrain은 실제 sklearn 학습입니다.
-- Chamber readiness 기반 **자동 주기 retrain scheduler는 아직 없습니다.**
-- `wafer_count_since_clean`은 현재 running sample마다 증가하는 demo counter입니다.
-- 여러 equipment sample은 하나의 generator clock을 순차 사용합니다.
-- `run_chamber_stream.py`는 local demo용 유한 runner이며 production streaming daemon이 아닙니다.
-
-상세 Chamber 사양과 결정 기록은 `docs/spec.md`, `docs/decisions.md`, `docs/progress.md`를 참고하세요.
+- Wafer Quality는 inspection DB를 우선 사용하며, rich demo가 필요할 때 **외부 `wafer_particle` 분석 결과의 정적 스냅샷**을 명시적인 proxy dataset으로 사용합니다.
+- Vision 결과를 Inspection Agent로 넘기는 API 연동은 구현되어 있습니다.
+- `process_events`와 Wafer의 관계는 **같은 Lot을 우선한 검사 이전 30분의 시간적 연관 후보**이며 인과관계 주장이 아닙니다.
+- 실제 설비 연결, 실제 Fab control limit, 자동 장비 제어, production 성능 보장은 현재 범위가 아닙니다.
+- 기존 wafer MLOps retrain/promote/rollback은 workflow 시뮬레이션이고, Chamber retrain은 별도 registry/artifact를 쓰는 실제 sklearn 학습입니다.

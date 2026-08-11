@@ -75,3 +75,33 @@
 - 현재 `wafer_count_since_clean`은 running telemetry sample마다 증가하는 demo counter다.
 - 여러 equipment sample은 하나의 generator clock을 순차 사용한다.
 - `run_chamber_stream.py`는 유한 sample/시간 실행용 local simulator이며 production daemon이 아니다.
+
+## 2026-08-11 — Chamber 중심 정보 구조를 Fab Quality Ops로 개편
+
+- 최상위 메뉴를 `Fab Overview · Process Monitoring · Wafer Quality · AI Analysis · MLOps · Data & RAG · Settings`로 변경한다.
+- 2026-08-02의 “Vision을 Chamber 하위 탭으로 유지” 결정은 당시 구현 기록으로 보존하되 현재 제품 구조에서는 더 이상 적용하지 않는다.
+- Chamber Resistance는 삭제하지 않고 Process Monitoring / Etch의 첫 connected 구현으로 재사용한다.
+- Vision snapshot은 삭제하지 않고 Wafer Detail의 `Vision Evidence`와 demo Lot fallback으로 재사용한다.
+
+## 2026-08-11 — Runtime DB 우선, 명시적 Demo fallback
+
+- Lot/Wafer 화면은 inspection DB 집계를 우선 사용한다.
+- DB가 비어 있을 때만 기존 Vision snapshot 기반 `LOT-VISION-DEMO-042`를 사용한다. runtime 기본 Lot과 ID를 분리해 우선순위 충돌을 막는다.
+- 화면의 각 값에는 Runtime DB, Synthetic runtime, Proxy runtime, Demo profile 중 출처를 표시한다.
+- Not connected 공정을 실제 Fab 상태처럼 표현하지 않는다.
+
+## 2026-08-11 — 기존 Chamber 테이블을 보존하는 process event projection
+
+- `process_events`는 기존 `chamber_telemetry`, `chamber_predictions`, `chamber_model_registry`를 대체하지 않는다.
+- Chamber residual anomaly만 공통 event로 투영하며 향후 다른 공정이 같은 계약을 사용할 수 있게 한다.
+- 검사와 공정 event는 이전 30분의 시간적 연관 후보로만 연결한다.
+- UI와 Agent prompt에서 원인 확정 문구를 사용하지 않는다.
+
+## 2026-08-11 — 실전 운영 구조 선택 (1-A, 2-A, 3-A)
+
+- PostgreSQL을 표준 로컬 개발 backend로 사용하며 `.env.example`에 필요한 값을 모두 제공한다. SQLite는 명시적 test/demo backend이고 설정 누락·연결 실패의 fallback으로 사용하지 않는다.
+- Data Quality Gate는 strict 정책을 사용한다. `VALID`만 예측·학습에 전달하고 `WARNING`은 audit telemetry/event만, `REJECT`는 모델 차단 대상으로 처리한다.
+- Generator와 Inspection을 직접 결합하지 않는다. 별도 Fab Scenario Orchestrator가 wafer completion 뒤 configured lag를 적용한다.
+- MAD를 primary, EWMA를 secondary detector로 사용하고 context threshold는 `equipment+recipe → equipment → recipe → global` 순서다.
+- readiness가 충족되면 자동으로 Staging Candidate를 만들 수 있으나 Production 승격은 사람의 명시적 호출만 허용한다.
+- process/inspection 연결은 같은 Lot을 강제한 시간적 후보이며 root cause로 단정하지 않는다.

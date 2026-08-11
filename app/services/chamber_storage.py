@@ -11,6 +11,8 @@ from app.services import db
 
 TELEMETRY_COLUMNS = (
     "id",
+    "lot_id",
+    "wafer_id",
     "equipment_id",
     "observed_at",
     "recipe_id",
@@ -51,6 +53,8 @@ TELEMETRY_COLUMNS = (
     "gas_json",
     "resistance",
     "quality",
+    "data_quality_status",
+    "data_quality_issues_json",
     "is_synthetic",
     "synthetic_anomaly_type",
     "created_at",
@@ -91,6 +95,19 @@ MODEL_COLUMNS = (
     "metadata_json",
 )
 
+DETECTION_COLUMNS = (
+    "id",
+    "prediction_id",
+    "detector_name",
+    "score",
+    "threshold",
+    "is_anomaly",
+    "context_key",
+    "observed_at",
+    "metadata_json",
+    "created_at",
+)
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -106,6 +123,8 @@ def init_chamber_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS chamber_telemetry (
                 id TEXT PRIMARY KEY,
+                lot_id TEXT,
+                wafer_id TEXT,
                 equipment_id TEXT NOT NULL,
                 observed_at TEXT NOT NULL,
                 recipe_id TEXT NOT NULL,
@@ -146,6 +165,8 @@ def init_chamber_db() -> None:
                 gas_json TEXT NOT NULL,
                 resistance REAL NOT NULL,
                 quality TEXT NOT NULL,
+                data_quality_status TEXT NOT NULL DEFAULT 'VALID',
+                data_quality_issues_json TEXT NOT NULL DEFAULT '[]',
                 is_synthetic INTEGER NOT NULL,
                 synthetic_anomaly_type TEXT,
                 created_at TEXT NOT NULL
@@ -186,6 +207,19 @@ def init_chamber_db() -> None:
                 metadata_json TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS anomaly_detections (
+                id TEXT PRIMARY KEY,
+                prediction_id TEXT NOT NULL,
+                detector_name TEXT NOT NULL,
+                score REAL NOT NULL,
+                threshold REAL NOT NULL,
+                is_anomaly INTEGER NOT NULL,
+                context_key TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_chamber_telemetry_equipment_time
             ON chamber_telemetry(equipment_id, observed_at);
             CREATE INDEX IF NOT EXISTS idx_chamber_telemetry_training
@@ -194,9 +228,23 @@ def init_chamber_db() -> None:
             ON chamber_predictions(equipment_id, observed_at);
             CREATE INDEX IF NOT EXISTS idx_chamber_predictions_model_time
             ON chamber_predictions(model_version, observed_at);
+            CREATE INDEX IF NOT EXISTS idx_anomaly_detection_prediction
+            ON anomaly_detections(prediction_id, detector_name);
+            CREATE INDEX IF NOT EXISTS idx_anomaly_detection_time
+            ON anomaly_detections(detector_name, observed_at);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_chamber_one_production
             ON chamber_model_registry(stage) WHERE stage = 'Production';
             """
+        )
+        _ensure_column(conn, "chamber_telemetry", "lot_id", "TEXT")
+        _ensure_column(conn, "chamber_telemetry", "wafer_id", "TEXT")
+        _ensure_column(conn, "chamber_telemetry", "data_quality_status", "TEXT NOT NULL DEFAULT 'VALID'")
+        _ensure_column(conn, "chamber_telemetry", "data_quality_issues_json", "TEXT NOT NULL DEFAULT '[]'")
+        # Additive indexes that reference migrated columns must be created only
+        # after older SQLite databases receive those columns.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chamber_telemetry_lot_time "
+            "ON chamber_telemetry(lot_id, observed_at)"
         )
 
 
@@ -209,6 +257,9 @@ def insert_telemetry(sample: dict[str, Any]) -> dict[str, Any]:
     record["id"] = str(record.get("id") or uuid.uuid4())
     record["created_at"] = str(record.get("created_at") or utc_now())
     record["is_synthetic"] = int(bool(record.get("is_synthetic")))
+    record["data_quality_status"] = str(record.get("data_quality_status") or "VALID")
+    issues = record.get("data_quality_issues", record.get("data_quality_issues_json", []))
+    record["data_quality_issues_json"] = issues if isinstance(issues, str) else json.dumps(issues, ensure_ascii=False)
     placeholders = ", ".join(["?"] * len(TELEMETRY_COLUMNS))
     with connect() as conn:
         conn.execute(
@@ -232,10 +283,76 @@ def insert_prediction(prediction: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
+def insert_anomaly_detection(detection: dict[str, Any]) -> dict[str, Any]:
+    record = {**detection}
+    record["id"] = str(record.get("id") or uuid.uuid4())
+    record["created_at"] = str(record.get("created_at") or utc_now())
+    record["is_anomaly"] = int(bool(record.get("is_anomaly")))
+    metadata = record.get("metadata", record.get("metadata_json", {}))
+    record["metadata_json"] = metadata if isinstance(metadata, str) else json.dumps(metadata, ensure_ascii=False)
+    placeholders = ", ".join(["?"] * len(DETECTION_COLUMNS))
+    with connect() as conn:
+        conn.execute(
+            f"INSERT INTO anomaly_detections ({', '.join(DETECTION_COLUMNS)}) VALUES ({placeholders})",
+            tuple(record.get(column) for column in DETECTION_COLUMNS),
+        )
+    return _decode_detection(record)
+
+
+def _decode_detection(row: Any) -> dict[str, Any]:
+    item = dict(row)
+    item["metadata"] = json.loads(item.pop("metadata_json", None) or "{}")
+    item["is_anomaly"] = bool(item.get("is_anomaly"))
+    return item
+
+
+def detection_rows(*, prediction_id: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit), 2000))
+    where = "WHERE prediction_id = ?" if prediction_id else ""
+    params = (prediction_id, safe_limit) if prediction_id else (safe_limit,)
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT {', '.join(DETECTION_COLUMNS)} FROM anomaly_detections {where} "
+            "ORDER BY observed_at DESC, id DESC LIMIT ?",
+            params,
+        ).fetchall()
+    return [_decode_detection(row) for row in rows]
+
+
+def detector_summary() -> list[dict[str, Any]]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT detector_name,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN is_anomaly = 1 THEN 1 ELSE 0 END) AS anomaly_count,
+                   AVG(score) AS average_score,
+                   AVG(threshold) AS average_threshold
+            FROM anomaly_detections
+            GROUP BY detector_name
+            ORDER BY detector_name
+            """
+        ).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
+def data_quality_summary() -> dict[str, int]:
+    counts = {"VALID": 0, "WARNING": 0, "REJECT": 0}
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT data_quality_status, COUNT(*) AS count "
+            "FROM chamber_telemetry GROUP BY data_quality_status"
+        ).fetchall()
+    for row in rows:
+        counts[str(row["data_quality_status"])] = int(row["count"])
+    return counts
+
+
 def clean_training_rows(*, since: str | None = None) -> list[dict[str, Any]]:
     where = [
         "t.quality = 'good'",
         "t.machine_state = 'running'",
+        "t.data_quality_status = 'VALID'",
         "(t.is_synthetic = 0 OR t.synthetic_anomaly_type IS NULL)",
         "(p.id IS NULL OR p.is_anomaly = 0)",
     ]
@@ -321,7 +438,7 @@ def equipment_summary() -> list[dict[str, Any]]:
 
 
 def count_rows(table: str) -> int:
-    allowed = {"chamber_telemetry", "chamber_predictions", "chamber_model_registry"}
+    allowed = {"chamber_telemetry", "chamber_predictions", "chamber_model_registry", "anomaly_detections"}
     if table not in allowed:
         raise ValueError(f"Unsupported Chamber table: {table}")
     with connect() as conn:
@@ -386,6 +503,15 @@ def production_model() -> dict[str, Any] | None:
     return _decode_model(row) if row else None
 
 
+def staging_model() -> dict[str, Any] | None:
+    with connect() as conn:
+        row = conn.execute(
+            f"SELECT {', '.join(MODEL_COLUMNS)} FROM chamber_model_registry "
+            "WHERE stage = 'Staging' ORDER BY registered_at DESC LIMIT 1"
+        ).fetchone()
+    return _decode_model(row) if row else None
+
+
 def promote_model(version: str, promoted_at: str | None = None) -> dict[str, Any] | None:
     timestamp = promoted_at or utc_now()
     with connect() as conn:
@@ -412,3 +538,8 @@ def next_model_version() -> str:
             except ValueError:
                 continue
     return f"resistance-v{highest + 1}"
+
+
+def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    if column not in db.table_columns(conn, table):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")

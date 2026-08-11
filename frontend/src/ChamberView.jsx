@@ -18,8 +18,7 @@ import {
 } from "recharts";
 
 import chamberSample from "./data/chamberSample.json";
-import { Icon, Metric, Panel, SubTabs } from "./lib";
-import WaferVisionView from "./WaferVisionView";
+import { Icon, Metric, Panel } from "./lib";
 
 
 const CHART_COLORS = {
@@ -548,8 +547,8 @@ function ResistanceAnalysis() {
 }
 
 
-function ResistanceWorkspace() {
-  const [mode, setMode] = useState("live");
+function ResistanceWorkspace({ initialMode = "live" }) {
+  const [mode, setMode] = useState(initialMode);
   return (
     <>
       <div className="chamber-mode-switch" role="tablist" aria-label="Resistance 데이터 모드">
@@ -562,21 +561,6 @@ function ResistanceWorkspace() {
 }
 
 
-export default function ChamberView({ onOpenInspection }) {
-  const [analysisMode, setAnalysisMode] = useState("resistance");
-  return (
-    <>
-      <SubTabs
-        tabs={[
-          { id: "resistance", icon: "activity", label: "저항 패턴 분석", en: "Resistance AI", badge: 2 },
-          { id: "vision", icon: "zoom", label: "웨이퍼 영상 분석", en: "Vision AI", badge: 3 },
-        ]}
-        active={analysisMode}
-        onChange={setAnalysisMode}
-      />
-      {analysisMode === "resistance"
-        ? <ResistanceWorkspace />
-        : <WaferVisionView onOpenInspection={onOpenInspection} />}
-    </>
-  );
+export default function ChamberView({ initialMode = "live" }) {
+  return <ResistanceWorkspace initialMode={initialMode} />;
 }

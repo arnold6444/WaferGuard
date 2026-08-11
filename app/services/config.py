@@ -39,9 +39,9 @@ DB_PATH = OUTPUT_DIR / "waferguard.db"
 RUNTIME_DIR = ROOT_DIR / "runtime"
 CHAMBER_MODEL_DIR = RUNTIME_DIR / "models" / "chamber"
 
-# --- Dual-mode backend toggles (default: all local, so dev is unchanged) ---
+# --- Dual-mode backend toggles. DB selection is validated by services.db. ---
 IMAGE_BACKEND = os.environ.get("IMAGE_BACKEND", "local").lower()      # local | s3
-STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "sqlite").lower()  # sqlite | postgres
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "").lower()       # sqlite | postgres (required)
 
 MODEL_VERSION = "wafer-defectnet-v2.3.1"
 DRIFT_THRESHOLD = 0.30

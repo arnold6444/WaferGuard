@@ -219,6 +219,12 @@ def run_automation_tick(request: AutomationTickRequest) -> dict[str, object]:
             }
         )
 
+    # The server tick may train a reviewable Chamber candidate, but deliberately
+    # never promotes it. Promotion remains an explicit human action/API call.
+    from app.services.chamber_runtime import chamber_runtime  # noqa: PLC0415
+
+    chamber_retraining = chamber_runtime.maybe_auto_retrain()
+
     return {
         "tick_id": f"AUTO-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",
         "mode": "automation_tick",
@@ -226,6 +232,7 @@ def run_automation_tick(request: AutomationTickRequest) -> dict[str, object]:
         "inspection": inspection,
         "drift_event": drift_event,
         "handoff_report": handoff_report,
+        "chamber_retraining": chamber_retraining,
         "events": events,
         "status": automation_status(request.line_id),
     }

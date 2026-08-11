@@ -1,119 +1,335 @@
 # Goal
 
-WaferGuard의 기존 정적 `USE_TIME -> RESISTANCE` 분석을 유지하면서, 재현 가능한 다변량 Etch telemetry를 생성하고 DB 저장, 실제 sklearn 학습, Production 추론, residual 이상탐지, Staging/Production 승격, Live dashboard까지 하나의 로컬 흐름으로 연결한다.
+WaferGuard를 synthetic AI 데모 모음이 아니라, Lot을 중심으로 공정 이상과 Wafer 품질 변화를 연결하는 Fab Quality Ops 운영 구조로 정리한다.
+
+최종 흐름은 `Lot → Process telemetry → Data Quality Gate → Expected Resistance → Residual detector → Process event → Wafer inspection → Lot/time correlation → Agent → Engineer review → RAG / Model lifecycle`이다. 실제 Fab 데이터가 들어오면 DB·generator·inspection adapter를 최소 변경으로 교체할 수 있어야 한다.
 
 # Scope
 
-## 구현 완료된 MVP
+## In Scope
 
-- recipe setpoint, actual 값, 장비 bias, cleaning/seasoning, machine state를 보존하는 stateful synthetic generator
-- telemetry, prediction, Chamber model registry 전용 DB 테이블과 조회 함수
-- numeric/categorical 전처리와 `GradientBoostingRegressor`를 묶은 실제 sklearn pipeline 및 joblib artifact
-- time-based holdout, MAE/RMSE, USE_TIME-only baseline 비교, Production 동일 holdout 비교
-- warm-up bootstrap, Production inference, clean-data retraining readiness, Staging 등록, 명시적 promote
-- Chamber status/equipment/telemetry/predictions/models/retrain/promote API
-- 기존 정적 화면을 보존하는 Live/Static Demo dashboard
-- generator, cleaning, machine-state, gas anomaly, model lifecycle 회귀 테스트와 smoke 검증
-- README/spec/progress/decision 문서를 실제 구현과 일치하도록 갱신
+- PostgreSQL을 명시적 로컬 개발 기본 환경으로 승격하고 SQLite를 unit test/demo backend로 유지
+- Docker Compose PostgreSQL, `.env.example`, startup validation, PostgreSQL integration test
+- `lots` 원장과 Lot 조회 API
+- Chamber telemetry의 `lot_id`, nullable `wafer_id`, Data Quality 상태
+- 기존 Chamber table을 유지하는 `process_events` 의미 event 계층
+- Lot/Wafer/recipe/장비 상태를 가진 Etch 생산 lifecycle simulator
+- telemetry sample과 wafer completion count 분리
+- YAML 기반 lot/wafer/recipe/equipment variation과 설명 가능한 sensor correlation
+- 모델 입력 전 Data Quality Gate와 집계 Data Quality event
+- 기존 GradientBoosting Expected Resistance 모델 유지
+- MAD primary detector + EWMA secondary detector 및 context threshold
+- overall/equipment/recipe/lot 평가 지표
+- readiness 기반 Candidate 자동 학습과 수동 Promotion
+- Lot/time 기반 Process → Wafer → Agent evidence
+- Fab scenario orchestrator와 synthetic E2E test
+- 실제 Chamber MLOps를 최상위 MLOps 기본 화면으로 승격
+- 기존 Vision, Static Resistance, Generic MLOps의 제품 역할 정리
+- README와 `docs/spec.md`, `docs/decisions.md`, `docs/progress.md` 동기화
 
-## 현재 제외 또는 후속 보완
+## Out of Scope
 
-- 실제 Fab 물리 계수 또는 실제 장비 정확도 주장
-- 실제 설비/메시지 버스 연결
-- 실제 Fab control limit와 자동 장비 제어
-- 자동 Production 승격
-- Chamber readiness를 주기적으로 검사해 `retrain()`을 자동 호출하는 scheduler
-- 별도 DB migration framework와 신규 인증 인프라
-- 기존 wafer model registry/MLOps simulation을 Chamber registry와 통합하는 작업
+- 실제 Fab 물리 simulator
+- Etch 외 7개 공정의 실제 telemetry/model
+- 실제 장비 제어와 yield 보장
+- Production model 자동 승격
+- process anomaly를 defect 원인으로 단정
+- 기존 AWS/RDS/S3 계약 제거
+- Git push, PR, merge, production deployment
 
 # Current State
 
-- `main`은 FastAPI + React/Vite 구조이며 로컬 SQLite와 PostgreSQL adapter를 지원한다.
-- Chamber Resistance는 **Live + Static Demo** 두 모드다.
-- Live 모드는 `configs/chamber.yaml` 기반 stateful Etch simulator에서 pressure/RF/gas/temperature/use/cleaning telemetry를 생성한다.
-- Live telemetry는 `chamber_telemetry`에 저장되고, 실제 sklearn Pipeline을 학습해 `runtime/models/chamber/resistance-vN.joblib` artifact를 만든다.
-- Production 모델 추론 결과는 Actual/Expected/residual/anomaly/model version과 함께 `chamber_predictions`에 저장한다.
-- Chamber model stage와 성능/threshold/artifact metadata는 `chamber_model_registry`에 저장한다.
-- 기존 inspection/RAG/wafer MLOps 9개 테이블과 Chamber 3개 테이블은 같은 runtime DB backend를 사용한다.
-- 기본 로컬 DB는 `outputs/waferguard.db` SQLite이며, `STORAGE_BACKEND=postgres`에서 PostgreSQL(RDS)로 전환한다.
-- Python requirements에는 pandas, scikit-learn, joblib, PyYAML이 포함되어 있다.
-- 기존 wafer retraining/promote/rollback은 workflow simulation이고 Chamber retraining은 별도 실제 sklearn 학습 경로다.
+## Already Implemented
+
+- SQLite/PostgreSQL DB adapter와 local/S3 object storage
+- Chamber synthetic telemetry, 실제 sklearn 학습/artifact, Expected Resistance, residual anomaly, 전용 registry와 Staging/Production
+- Inspection, Vision/Metrology evidence, RAG, Agent, Human review
+- `process_events` anomaly projection과 검사 이전 30분 후보 조회
+- Fab Overview, 8개 Process Profile, Etch Process Monitoring
+- Wafer Quality의 runtime Lot 집계/demo fallback, Timeline, Accumulated Defect Map, Vision Evidence
+- 최상위 AI Analysis와 기존 Agent deep-link
+
+## Missing or Conflicting
+
+- DB backend 기본값이 SQLite이며 PostgreSQL Compose/startup validation/integration test가 없음
+- `lots` table이 없고 Lot summary가 inspection rows에서만 역산됨
+- Chamber telemetry에 `lot_id`, `wafer_id`, Data Quality 상태가 없음
+- Generator가 running telemetry sample마다 `wafer_count_since_clean`을 증가시킴
+- 자동 lifecycle이 사실상 running/cleaning뿐이며 startup/hold/shutdown이 없음
+- recipe가 Lot이 아니라 sample count 주기로 변경됨
+- Data Quality Gate와 aggregate event가 없음
+- residual threshold가 global MAD 하나이며 detector 비교/context threshold/group metrics가 없음
+- readiness는 있으나 실제 periodic Candidate trigger에 연결되지 않음
+- Agent가 evidence는 받지만 출력 계약이 구조화되어 있지 않음
+- 최상위 MLOps는 generic wafer simulation이 기본이며 실제 Chamber lifecycle이 Process 화면에만 있음
 
 # Decisions
 
-- 기존 wafer API와 registry는 그대로 두고 Chamber 코드는 `chamber_*` 모듈과 테이블로 분리한다.
-- gas는 고정 3채널(name/setpoint/actual)로 저장하고 학습 시 flow/delta/ratio feature로 변환한다.
-- `running`, `quality=good`, model non-anomaly 데이터를 기본 학습 후보로 사용한다. synthetic anomaly ground truth 필터는 synthetic row에만 적용한다.
-- 학습과 추론은 같은 feature builder와 저장된 sklearn pipeline을 사용한다. unknown recipe/equipment/gas는 `OneHotEncoder(handle_unknown="ignore")`로 처리한다.
-- 최초 bootstrap만 Production으로 등록한다. 이후 retraining 결과는 Staging으로 등록하고 명시적으로 promote한다.
-- readiness는 최근 prediction의 median absolute error, Production 이후 신규 clean row, 경과 시간을 함께 본다. `force=true`는 로컬 demo용 override다.
-- readiness 계산은 구현되어 있지만 이를 주기적으로 자동 호출하는 Chamber scheduler는 아직 없다.
-- promotion은 artifact 존재/로드를 확인한 뒤 현재 Production을 Archived로 전환하고 선택 버전 하나만 Production으로 만든다.
-- SQLite/PostgreSQL 공통성을 위해 Chamber row ID는 UUID text를 사용하고 SQL column 목록을 명시한다.
+- 사용자가 `1-A` 선택: `.env.example`과 표준 로컬 실행은 PostgreSQL이며 backend 선택은 명시한다. 설정 누락·연결 실패 시 SQLite로 조용히 fallback하지 않는다.
+- 사용자가 `2-A` 선택: `VALID`만 prediction/training으로 전달한다. `WARNING`은 audit telemetry와 aggregate event만 저장하고 `REJECT`는 모델에서 차단한다.
+- 사용자가 `3-A` 선택: Generator와 Inspection을 직접 결합하지 않고 별도 Fab Scenario Orchestrator가 wafer completion 이후 lag를 적용해 연결한다.
+- SQLite unit tests는 `STORAGE_BACKEND=sqlite`를 명시한다.
+- 기존 `f4ge-anomaly-engine` PostgreSQL이 host 5432를 사용 중이므로 다른 컨테이너를 중단하지 않는다. Compose 기본은 5432로 유지하고 현재 검증은 `POSTGRES_PORT=5433`을 사용한다.
+- schema 변경은 현재 프로젝트 방식인 `CREATE TABLE IF NOT EXISTS`와 `_ensure_column`을 확장한다.
+- `chamber_telemetry`는 raw/processed sample, `chamber_predictions`는 primary 결과, `anomaly_detections`는 detector별 결과, `process_events`는 의미 있는 운영 event 역할을 가진다.
+- Robust MAD를 primary detector로 유지하고 EWMA를 secondary detector로 추가한다.
+- threshold 우선순위는 `equipment+recipe → equipment → recipe → global`이며 데이터 부족 시 fallback한다.
+- 자동 학습은 기존 automation tick과 stream periodic check에 readiness를 연결하고 Staging Candidate까지만 생성한다. Promotion은 사람 호출만 허용한다.
+- Process/Wafer 연결은 같은 Lot과 시간 범위를 우선하고, 시간적 후보라는 문구를 UI·Agent·문서에 유지한다.
+- 실제 Chamber MLOps를 최상위 MLOps 기본 화면으로 두고 generic workflow는 Legacy/Demo로 표시한다.
 
 # Architecture / Flow
 
 ```text
-EtchTelemetryGenerator
-  -> chamber_telemetry INSERT
-  -> Production model 없음: clean warm-up 축적 -> bootstrap fit -> Production
-  -> Production model 있음: shared feature transform -> predict
-  -> expected/residual/score/anomaly/model version -> chamber_predictions INSERT
-  -> recent residual + new clean rows -> retraining readiness
-  -> manual API/UI trigger 또는 force retrain -> time holdout candidate fit + Production 비교 -> Staging
-  -> explicit promote -> previous Production Archived -> selected artifact Production
+PostgreSQL (default dev / integration / production)
+SQLite     (explicit unit test / lightweight demo)
+
+Lot Lifecycle Simulator
+  → lots
+  → Chamber telemetry + lot_id + optional wafer_id
+  → Data Quality Gate
+      → VALID: telemetry → model → detections
+      → WARNING/REJECT: audit + aggregated data_quality event
+  → Expected Resistance Model
+  → MAD primary + EWMA secondary
+  → process_events
+
+Fab Scenario Orchestrator
+  → wafer completion + configured lag
+  → Vision / Metrology / Inspection
+  → same Lot + time-window process events
+  → structured Inspection Agent evidence
+  → Engineer Review / RAG
 ```
 
 # Implementation Steps
 
-1. `configs/chamber.yaml`, `app/services/chamber_generator.py`
-   - recipe, state transition, cleaning, correlated setpoint/actual values, 8종 anomaly 구현
-   - seed 재현성과 시계열 연속성 테스트
-2. `app/services/storage.py`, `app/services/chamber_storage.py`
-   - Chamber 3개 테이블/index, 명시적 insert/query, DB browser allowlist 구현
-3. `app/services/chamber_training.py`, `app/services/chamber_runtime.py`
-   - shared feature builder, pipeline fit/load, holdout 비교, bootstrap/inference/readiness/retrain/promote 구현
-4. `app/services/schemas.py`, `app/main.py`, `scripts/run_chamber_stream.py`
-   - Chamber API와 로컬 stream CLI 연결
-5. `frontend/src/ChamberView.jsx`, `frontend/src/styles.css`
-   - Live polling, Actual/Expected/anomaly, parameter deviation, model/version/importance UI 추가
-6. `README.md`, `docs/spec.md`, `docs/progress.md`, `docs/decisions.md`, `docs/implementation-plan.md`
-   - 최신 구현과 한계, 저장 구조, 실행 방법 반영
-7. `tests/test_chamber.py`
-   - generator/model/DB/lifecycle 테스트 후 compile, pytest, build, API smoke 검증
+## Step 1 — PostgreSQL Local Runtime
+
+Files:
+
+- `compose.yaml`
+- `.env.example`
+- `app/services/config.py`
+- `app/services/db.py`
+- `app/main.py`
+- `tests/conftest.py`
+- `tests/test_postgres_integration.py`
+- `README.md`
+
+Work:
+
+- PostgreSQL 16 service, healthcheck, persistent volume, configurable host port
+- explicit backend configuration validation and actionable connection errors
+- backend-aware DB overview label
+- PostgreSQL schema/CRUD integration coverage
+
+Verify:
+
+- `docker compose config`
+- `POSTGRES_PORT=5433 docker compose up -d postgres`
+- PostgreSQL healthcheck and integration test
+- explicit SQLite test suite
+
+## Step 2 — Lot and Event Data Model
+
+Files:
+
+- `app/services/storage.py`
+- `app/services/chamber_storage.py`
+- `app/services/process_ops.py`
+- `app/main.py`
+
+Work:
+
+- `lots` schema/index/upsert/query
+- telemetry `lot_id`, nullable `wafer_id`, Data Quality columns
+- `anomaly_detections` schema/index/query
+- process event query filters for Lot/equipment/process/recipe/time
+- existing SQLite idempotent migration
+
+Verify:
+
+- old SQLite DB opens without loss
+- Lot/telemetry/event CRUD tests on SQLite and PostgreSQL
+
+## Step 3 — Production Lifecycle Generator
+
+Files:
+
+- `configs/chamber.yaml`
+- `app/services/chamber_generator.py`
+- `app/services/chamber_runtime.py`
+- `scripts/run_chamber_stream.py`
+- `tests/test_chamber.py`
+
+Work:
+
+- Lot start/completion, 25-wafer sequence, multi-sample wafer processing
+- idle/startup/running/hold/alarm/cleaning/maintenance/shutdown states
+- Lot-level recipe, equipment bias, lot transient, wafer variation, cleaning effect
+- wafer count increments only at wafer completion
+- lifecycle events update `lots` and emit only meaningful `process_events`
+
+Verify:
+
+- one wafer produces multiple telemetry rows
+- Lot and wafer boundaries are deterministic under a seed
+- cleaning/reset and legacy state override remain valid
+
+## Step 4 — Data Quality Gate
+
+Files:
+
+- `app/services/chamber_data_quality.py`
+- `app/services/chamber_runtime.py`
+- `app/services/chamber_storage.py`
+- `configs/chamber.yaml`
+- `tests/test_chamber_data_quality.py`
+
+Work:
+
+- missing, duplicate, reversal, gap, interval, stuck sensor, physical range, state, recipe validation
+- `VALID/WARNING/REJECT` result and issue metadata
+- strict model gate and valid-only clean training rows
+- repeated issue aggregation into `process_events(event_type=data_quality)`
+
+Verify:
+
+- each required rule has deterministic tests
+- warning/reject rows never become prediction/training candidates
+- repeated stuck sensor creates one aggregate event rather than one per sample
+
+## Step 5 — Detector and MLOps
+
+Files:
+
+- `app/services/chamber_training.py`
+- `app/services/chamber_runtime.py`
+- `app/services/chamber_storage.py`
+- `app/services/automation.py`
+- `scripts/run_chamber_stream.py`
+- `frontend/src/MlopsWorkspace.jsx`
+- `frontend/src/ProcessMonitoring/EtchMonitoring.jsx`
+
+Work:
+
+- context MAD thresholds and global fallback
+- EWMA detector and `anomaly_detections` rows
+- overall/equipment/recipe/lot holdout metrics
+- readiness → automatic Staging Candidate, manual Production promotion
+- actual Chamber lifecycle as primary MLOps UI, generic flow as Legacy/Demo
+
+Verify:
+
+- detector comparison/context fallback tests
+- Candidate is created only when ready and never auto-promoted
+- Production/Candidate metrics and data range are visible
+
+## Step 6 — Process to Wafer and Agent
+
+Files:
+
+- `app/services/process_ops.py`
+- `app/services/pipeline.py`
+- `app/services/agent.py`
+- `app/services/action_card.py`
+- `app/services/fab_scenario.py`
+- `scripts/run_fab_scenario.py`
+- `tests/test_fab_scenario.py`
+
+Work:
+
+- same-Lot then time-window related process event lookup
+- lot context, same-lot trend, equipment/recipe history, accumulated defect evidence
+- Agent output sections: Observation, Possible Causes, Evidence, Recommended Checks, Recommended Action, Confidence/Uncertainty
+- deterministic RF drift → W13~W15 degradation → inspection → Agent evidence scenario
+
+Verify:
+
+- E2E scenario preserves temporal order and Lot identity
+- Agent output does not claim causality
+- unrelated Lot events are excluded
+
+## Step 7 — UI and Documentation Consolidation
+
+Files:
+
+- `frontend/src/FabOverview.jsx`
+- `frontend/src/ProcessMonitoring/*`
+- `frontend/src/WaferQuality/*`
+- `frontend/src/AIAnalysis/*`
+- `frontend/src/DatabaseView.jsx`
+- `README.md`
+- `docs/spec.md`
+- `docs/decisions.md`
+- `docs/progress.md`
+
+Work:
+
+- Lot source/status/process alert summary from `lots`
+- Data Quality and detector comparison visibility
+- Static Resistance remains Etch Legacy/Static Demo
+- Vision remains Wafer Detail evidence only
+- Generic MLOps clearly marked Legacy/Demo
+- real/synthetic/proxy/temporal boundaries synchronized in UI and docs
+
+Verify:
+
+- frontend production build
+- browser flow: Fab Overview → Etch → Lot/Wafer → AI Analysis → MLOps/Data
+- browser console and API network errors absent
 
 # Definition of Done
 
-- 여러 장비의 multivariate telemetry가 DB에 쌓인다.
-- clean 이후 since-clean counter가 reset되고 비-running row가 학습/추론에서 제외된다.
-- 실제 `.fit()` 결과와 pipeline artifact가 생성되고 multivariate holdout 성능이 USE_TIME baseline보다 낫다.
-- Production 추론 결과에 actual/expected/residual/anomaly/model version이 저장된다.
-- readiness gate, Staging retrain, artifact 검증, 명시적 promote가 동작한다.
-- Live dashboard가 API 데이터를 표시하고 Static Demo는 기존 화면을 유지한다.
-- 기존 FastAPI compile, Chamber tests, frontend production build가 통과한다.
-
-# Known Simplifications
-
-- `wafer_count_since_clean`은 현재 simulator에서 running sample마다 증가하는 demo counter이며 실제 wafer cycle 완료 이벤트와 분리되어 있지 않다.
-- 여러 equipment sample은 하나의 generator clock을 순차 사용하므로 동일 round의 timestamp가 완전히 동일하지 않다.
-- `run_chamber_stream.py`는 기본적으로 유한 sample 수를 생성하며 항상 켜져 있는 production stream daemon은 아니다.
-- Chamber retraining readiness는 계산하지만 자동 scheduler가 아직 직접 `retrain()`을 실행하지 않는다.
+- PostgreSQL Compose startup and explicit validation work; SQLite remains explicit fallback.
+- `lots`, telemetry Lot context, optional wafer context, detector results, process events exist with useful indexes.
+- Generator models Lot/Wafer lifecycle and multiple telemetry samples per wafer.
+- Data Quality Gate blocks non-VALID rows from prediction/training and aggregates meaningful quality events.
+- real sklearn Expected Resistance training/artifacts/registry remain functional.
+- MAD and EWMA results are comparable and context thresholds fallback correctly.
+- group-wise evaluation and automatic Staging Candidate creation are available; promotion remains manual.
+- process anomalies and inspections correlate by same Lot/time without causal claims.
+- Agent uses process, Lot/Wafer, Vision, Metrology, RAG and structured uncertainty.
+- current UI consolidation remains intact and real Chamber MLOps becomes primary.
+- SQLite tests, PostgreSQL integration tests, E2E scenario, smoke, build and browser verification pass.
+- README/docs match the implemented commands, boundaries and remaining synthetic components.
 
 # Verification
 
-```bash
+```powershell
+$env:STORAGE_BACKEND='sqlite'
 python -m compileall -q app scripts tests
-python -m pytest tests/test_chamber.py -q
-python scripts/run_chamber_stream.py --equipment-count 2 --interval 0 --samples 150
-cd frontend
-npm run build
+python -m pytest -q -W error --basetemp .pytest_cache\fab-ops-runtime
+python -W error scripts\smoke_test.py
+
+$env:POSTGRES_PORT='5433'
+docker compose up -d postgres
+$env:STORAGE_BACKEND='postgres'
+$env:RDS_HOST='127.0.0.1'
+$env:RDS_PORT='5433'
+$env:RDS_DB='waferguard'
+$env:RDS_USER='waferguard'
+$env:RDS_PASSWORD='waferguard'
+$env:RUN_POSTGRES_TESTS='1'
+python -m pytest tests\test_postgres_integration.py -q -W error
+
+Push-Location frontend
+npm.cmd run build
+Pop-Location
+git diff --check
 ```
 
 # Progress
 
-- [x] 최신 `main` 기준 저장소 분석 및 범위/결정 확정
-- [x] Backend 구현
-- [x] Dashboard 구현
-- [x] Chamber 실제 sklearn lifecycle 구현
-- [x] 문서 동기화
-- [x] 검증 및 main 병합
+- [x] Repository analysis
+- [x] Interview decisions
+- [x] PLAN.md updated
+- [x] PostgreSQL runtime
+- [x] Lot/event data model
+- [x] Generator lifecycle
+- [x] Data Quality Gate
+- [x] Detector/MLOps
+- [x] Process/Wafer/Agent E2E
+- [x] UI/docs consolidation
+- [x] Final verification
