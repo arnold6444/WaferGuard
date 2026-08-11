@@ -142,6 +142,44 @@ Agent 최종 출력은 `Observation`, `Possible Causes`, `Evidence`, `Recommende
 - 선택 object storage: S3 (`IMAGE_BACKEND=s3`)
 - `process_events`는 기존 DB abstraction과 Data & RAG browser에 포함된다.
 
+## 현재 Chamber ML 계약
+
+현재 Chamber ML은 범용 tag-level anomaly framework가 아니다.
+
+```text
+Etch fixed feature schema
+→ sklearn GradientBoostingRegressor
+→ Expected Resistance
+→ Actual - Expected residual
+→ Robust MAD + EWMA
+```
+
+- 입력 feature schema는 `app/services/chamber_training.py`의 numeric/categorical feature 정의를 따른다.
+- 학습 row는 `VALID + running + quality=good` clean telemetry를 사용한다.
+- 최초 모델은 clean row warm-up 이후 bootstrap된다.
+- 검증은 time-based holdout MAE/RMSE와 group metric을 사용한다.
+- stream periodic readiness check는 Staging Candidate를 만들 수 있으나 Production promotion은 자동화하지 않는다.
+
+## 현재 미구현 Training / Portability 계약
+
+다음 기능은 현재 제공 기능이 아니라 다음 단계다.
+
+- 별도 offline bulk Train/Validation/Test dataset pipeline
+- Validation threshold selection + final untouched Test evaluation
+- arbitrary source tag → canonical tag mapping
+- tag unit/type/required/optional Environment Profile
+- profile-driven dynamic feature schema
+- machine-state source value mapping
+- profile/model/scaler/feature compatibility check
+- tag별 independent univariate detector
+- arbitrary tag set의 multivariate relationship detector
+- relationship-break evaluation
+- LSTM/TCN/Transformer anomaly model
+
+새 실제 환경의 목표는 같은 model artifact를 무조건 재사용하는 것이 아니라 **환경 profile과 정상 데이터를 이용해 동일 Training Pipeline으로 해당 환경용 모델을 다시 학습하는 것**이다.
+
+상세 다음 단계는 `docs/training_realworld_roadmap.md`를 따른다.
+
 ## 구현 경계
 
 - 실제 detector/model은 Etch 외 공정에 구현하지 않는다.
