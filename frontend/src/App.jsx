@@ -5,18 +5,22 @@ import { SettingsProvider, useStream } from "./SettingsContext";
 import { MlopsAgentProvider } from "./MlopsAgentContext";
 import { DefectChatProvider } from "./DefectChatContext";
 
-const ChamberView = lazy(() => import("./ChamberView"));
-const InspectionWorkspace = lazy(() => import("./InspectionWorkspace"));
+const FabOverview = lazy(() => import("./FabOverview"));
+const ProcessMonitoringView = lazy(() => import("./ProcessMonitoring/ProcessMonitoringView"));
+const WaferQualityView = lazy(() => import("./WaferQuality/WaferQualityView"));
+const AIAnalysisView = lazy(() => import("./AIAnalysis/AIAnalysisView"));
 const MlopsWorkspace = lazy(() => import("./MlopsWorkspace"));
 const DatabaseView = lazy(() => import("./DatabaseView"));
 const SettingsView = lazy(() => import("./SettingsView"));
 
 const NAV = [
-  { id: "chamber", icon: "activity", label: "챔버 이상탐지", en: "Chamber AI",       View: ChamberView, badge: 5 },
-  { id: "inspect", icon: "layers",  label: "실시간 검사",    en: "Live Inspection", View: InspectionWorkspace },
-  { id: "mlops",   icon: "box",     label: "MLOps 콘솔",    en: "MLOps",           View: MlopsWorkspace },
-  { id: "data",    icon: "history", label: "데이터 관리",    en: "Data & RAG",      View: DatabaseView },
-  { id: "settings",icon: "cpu",     label: "설정",          en: "Settings",        View: SettingsView },
+  { id: "overview", icon: "gauge",    label: "Fab 개요",       en: "Fab Overview",       View: FabOverview },
+  { id: "process",  icon: "activity", label: "공정 모니터링",   en: "Process Monitoring", View: ProcessMonitoringView },
+  { id: "quality",  icon: "layers",   label: "Wafer 품질",     en: "Wafer Quality",      View: WaferQualityView },
+  { id: "ai",       icon: "bot",      label: "AI 분석",         en: "AI Analysis",        View: AIAnalysisView },
+  { id: "mlops",    icon: "box",      label: "MLOps",          en: "MLOps",              View: MlopsWorkspace },
+  { id: "data",     icon: "history",  label: "Data / RAG",     en: "Data & RAG",         View: DatabaseView },
+  { id: "settings", icon: "cpu",      label: "설정",            en: "Settings",           View: SettingsView },
 ];
 
 function Clock() {
@@ -62,7 +66,7 @@ function AgentToast({ data, onGo, onClose }) {
             style={{ marginLeft: "auto", padding: "3px 6px" }}><Icon name="x" size={13} /></button>
         </div>
         <div style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-          AI 분석이 진행 중입니다. 실시간 검사 → 검사 에이전트에서 추정 원인과 권장 액션을 확인하세요.
+          AI 분석이 진행 중입니다. AI 분석에서 공정·Wafer·과거 사례 근거와 권장 액션을 확인하세요.
         </div>
         <button className="btn btn-accent" onClick={onGo} style={{ alignSelf: "flex-start", padding: "5px 12px", fontSize: 11.5 }}>
           <Icon name="bot" size={13} />분석 보러 가기
@@ -115,9 +119,10 @@ function Sidebar({ active, setActive }) {
 
 function AppInner() {
   const [theme, setTheme]   = useState("light");
-  const [active, setActive] = useState("chamber");
+  const [active, setActive] = useState("overview");
   const [toast, setToast]   = useState(null);
   const [agentFocus, setAgentFocus] = useState(null);
+  const [target, setTarget] = useState(null);
   const { latest, tick } = useStream();
   const lastToastTick = useRef(0);
   const toastTimer = useRef(null);
@@ -129,7 +134,7 @@ function AppInner() {
   // transient nudge toward the Agent tab when a Medium/High inspection lands
   useEffect(() => {
     if (!latest || tick === lastToastTick.current) return;
-    if ((latest.risk_level === "High" || latest.risk_level === "Medium") && active !== "inspect") {
+    if ((latest.risk_level === "High" || latest.risk_level === "Medium") && active !== "ai") {
       lastToastTick.current = tick;
       setToast({ id: latest.id, level: latest.risk_level, wafer: latest.wafer_id || "W?", defect: latest.defect_type || "결함" });
       clearTimeout(toastTimer.current);
@@ -140,12 +145,20 @@ function AppInner() {
   const cur = NAV.find(n => n.id === active);
   const View = cur.View;
 
+  function navigate(next) {
+    const destination = typeof next === "string" ? { id: next } : next;
+    if (!destination?.id || !NAV.some(item => item.id === destination.id)) return;
+    if (destination.focusId) setAgentFocus(destination.focusId);
+    setTarget(destination);
+    setActive(destination.id);
+  }
+
   return (
     <div style={{ minHeight: "100vh" }}>
       {toast && (
         <AgentToast
           data={toast}
-          onGo={() => { setAgentFocus(toast.id); setActive("inspect"); setToast(null); }}
+          onGo={() => { navigate({ id: "ai", focusId: toast.id }); setToast(null); }}
           onClose={() => setToast(null)}
         />
       )}
@@ -160,8 +173,8 @@ function AppInner() {
         <div className="vdivider" style={{ height: 26 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="chip" style={{ color: "var(--low)", borderColor: "var(--low)" }}><StatusDot kind="ok" />시스템 정상</span>
-          <span className="chip"><span style={{ color: "var(--text-3)" }}>모델</span> {active === "chamber" ? "GBR · OOF" : "v4.2.1"}</span>
-          <span className="chip"><span style={{ color: "var(--text-3)" }}>{active === "chamber" ? "분석" : "큐"}</span> <span className="mono">{active === "chamber" ? "2 MODE" : "3 대기"}</span></span>
+          <span className="chip"><span style={{ color: "var(--text-3)" }}>제품</span> FAB QUALITY OPS</span>
+          <span className="chip"><span style={{ color: "var(--text-3)" }}>데이터</span> <span className="mono">RUNTIME + DEMO</span></span>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ textAlign: "right", lineHeight: 1.2 }}>
@@ -176,7 +189,7 @@ function AppInner() {
       </header>
 
       <div style={{ display: "flex", alignItems: "stretch" }}>
-        <Sidebar active={active} setActive={setActive} />
+        <Sidebar active={active} setActive={(id) => navigate(id)} />
         <main style={{ flex: 1, minWidth: 0, padding: 15, maxWidth: 1480, margin: "0 auto", width: "100%" }}>
           {/* context bar */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 15, paddingTop: 2 }}>
@@ -191,9 +204,12 @@ function AppInner() {
 
           <Suspense fallback={<div className="panel" style={{ padding: 18 }}>화면을 불러오는 중입니다…</div>}>
             <div key={active} className="fade-in">
-              <View focusId={cur.id === "inspect" ? agentFocus : undefined}
-                onFocusHandled={cur.id === "inspect" ? () => setAgentFocus(null) : undefined}
-                onOpenInspection={(inspectionId) => { setAgentFocus(inspectionId); setActive("inspect"); }} />
+              <View
+                target={target?.id === active ? target : undefined}
+                onNavigate={navigate}
+                focusId={cur.id === "ai" ? agentFocus : undefined}
+                onFocusHandled={cur.id === "ai" ? () => setAgentFocus(null) : undefined}
+              />
             </div>
           </Suspense>
         </main>

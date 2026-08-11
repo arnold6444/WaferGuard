@@ -53,6 +53,8 @@ def main() -> int:
     started = time.monotonic()
     rounds = 0
     states: dict[str, int] = {}
+    auto_retraining: dict | None = None
+    retrain_check_samples = max(1, int(generator.config["model"].get("auto_retrain_check_samples", 30)))
     while True:
         if args.duration is not None:
             if time.monotonic() - started >= args.duration:
@@ -69,6 +71,8 @@ def main() -> int:
             result = runtime.process_sample(sample)
             states[result["state"]] = states.get(result["state"], 0) + 1
         rounds += 1
+        if rounds % retrain_check_samples == 0:
+            auto_retraining = runtime.maybe_auto_retrain()
         if args.interval:
             time.sleep(args.interval)
 
@@ -97,6 +101,7 @@ def main() -> int:
             "production_model": compact_production,
             "readiness": full_status["readiness"],
         },
+        "auto_retraining": auto_retraining,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

@@ -24,6 +24,7 @@ from app.services.rag import retrieve_cases
 from app.services.reporting import build_report
 from app.services.risk import compute_risk_score, risk_level
 from app.services.schemas import InspectRequest
+from app.services.process_ops import inspection_operating_context
 from app.services.storage import insert_alert, insert_inspection, production_model, utc_now
 from app.services.synthetic_wafer import choose_defect, generate_images
 
@@ -114,6 +115,11 @@ def _save_report_pdf(inspection_id: str, record: dict) -> str | None:
 
 
 def run_inspection(request: InspectRequest) -> dict[str, object]:
+    inspection_at = (
+        request.inspection_timestamp.isoformat(timespec="seconds")
+        if request.inspection_timestamp
+        else utc_now()
+    )
     defect_type = choose_defect(request.defect_hint)
     inspection_id = _inspection_id(request.wafer_id, defect_type)
     repeat_weight = _repeat_weight(request.line_id, defect_type)
@@ -127,7 +133,18 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
         request.line_id,
         query_text=f"{defect_type} 결함, {request.process_step} 공정, {request.equipment_id} 설비 이상 대응",
     )
-    process_context = build_process_context(request)
+    process_context = build_process_context(request, inspection_timestamp=inspection_at)
+    process_context.update(
+        inspection_operating_context(
+            lot_id=request.lot_id,
+            wafer_id=request.wafer_id,
+            equipment_id=request.equipment_id,
+            inspection_at=inspection_at,
+            recipe_id=request.recipe_id,
+        )
+    )
+    if not process_context.get("process_timestamp") and process_context["related_process_events"]:
+        process_context["process_timestamp"] = process_context["related_process_events"][0].get("observed_at")
     metrology = build_metrology_context(request, float(image_result["hotspot_ratio"]))
     metrology_rule_hits = evaluate_metrology_rules(defect_type, process_context, metrology)
     risk_score = compute_risk_score(
@@ -254,7 +271,7 @@ def run_inspection(request: InspectRequest) -> dict[str, object]:
         "action_card": action_card,
         "model_version": model_version,
         "status": status,
-        "created_at": utc_now(),
+        "created_at": inspection_at,
         # Agent fields (None for Low / rule-only cases)
         "agent_final_action": agent_result.get("final_action") if agent_result else None,
         "agent_tool_calls": agent_result.get("tool_calls") if agent_result else None,

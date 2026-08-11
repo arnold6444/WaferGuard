@@ -6,14 +6,20 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 const TABLE_LABELS = {
   inspections:       "검사 이력",
+  lots:              "Lot 운영 원장",
   model_registry:    "모델 레지스트리",
   drift_events:      "드리프트 이벤트",
   retraining_jobs:   "재학습 잡",
   alerts:            "알림",
+  process_events:    "공정 이벤트",
   handoff_reports:   "인수인계 리포트",
   agent_traces:      "Agent 트레이스",
   pending_approvals: "승인 대기",
   rag_documents:     "RAG 문서",
+  chamber_telemetry: "Chamber Telemetry",
+  chamber_predictions: "Chamber Predictions",
+  anomaly_detections: "Anomaly Detector 결과",
+  chamber_model_registry: "Chamber Model Registry",
 };
 
 function formatBytes(n) {
@@ -88,12 +94,12 @@ export default function DatabaseView() {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <RagView />
 
-      <Panel title="데이터베이스 브라우저 · SQLite" icon="box" dense pad={0}
+      <Panel title={`데이터베이스 브라우저 · ${(overview?.backend || "database").toUpperCase()}`} icon="box" dense pad={0}
         right={
           <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {overview && (
               <span className="mono" style={{ fontSize: 10.5, color: "var(--text-3)" }}>
-                waferguard.db · {formatBytes(overview.db_size_bytes)}
+                {overview.backend === "sqlite" ? `waferguard.db · ${formatBytes(overview.db_size_bytes)}` : "runtime PostgreSQL"}
               </span>
             )}
             <button className="btn btn-ghost" onClick={refresh} style={{ padding: "4px 8px" }} title="새로고침">

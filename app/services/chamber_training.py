@@ -141,6 +141,74 @@ def _residual_threshold(actual: np.ndarray, expected: np.ndarray) -> float:
     return float(max(0.25, robust))
 
 
+def _context_thresholds(
+    rows: list[dict[str, Any]],
+    actual: np.ndarray,
+    expected: np.ndarray,
+    *,
+    minimum_rows: int,
+) -> dict[str, Any]:
+    thresholds: dict[str, Any] = {
+        "global": _residual_threshold(actual, expected),
+        "equipment_recipe": {},
+        "equipment": {},
+        "recipe": {},
+    }
+    dimensions = {
+        "equipment_recipe": lambda row: f"{row.get('equipment_id', '-')}|{row.get('recipe_id', '-')}",
+        "equipment": lambda row: str(row.get("equipment_id") or "-"),
+        "recipe": lambda row: str(row.get("recipe_id") or "-"),
+    }
+    for dimension, key_fn in dimensions.items():
+        groups: dict[str, list[int]] = {}
+        for index, row in enumerate(rows):
+            groups.setdefault(key_fn(row), []).append(index)
+        for key, indices in groups.items():
+            if len(indices) < minimum_rows:
+                continue
+            thresholds[dimension][key] = _residual_threshold(actual[indices], expected[indices])
+    return thresholds
+
+
+def resolve_threshold(bundle: dict[str, Any], row: dict[str, Any]) -> tuple[float, str]:
+    """Resolve equipment+recipe → equipment → recipe → global threshold."""
+    thresholds = bundle.get("thresholds") or {"global": bundle.get("threshold", 0.25)}
+    equipment = str(row.get("equipment_id") or "-")
+    recipe = str(row.get("recipe_id") or "-")
+    candidates = (
+        ("equipment_recipe", f"{equipment}|{recipe}"),
+        ("equipment", equipment),
+        ("recipe", recipe),
+    )
+    for dimension, key in candidates:
+        value = thresholds.get(dimension, {}).get(key)
+        if value is not None:
+            return float(value), f"{dimension}:{key}"
+    return float(thresholds.get("global", bundle.get("threshold", 0.25))), "global"
+
+
+def _group_metrics(
+    rows: list[dict[str, Any]],
+    actual: np.ndarray,
+    expected: np.ndarray,
+    *,
+    minimum_rows: int,
+) -> dict[str, dict[str, dict[str, float | int]]]:
+    result: dict[str, dict[str, dict[str, float | int]]] = {}
+    for dimension, field in (("equipment", "equipment_id"), ("recipe", "recipe_id"), ("lot", "lot_id")):
+        groups: dict[str, list[int]] = {}
+        for index, row in enumerate(rows):
+            key = str(row.get(field) or "unassigned")
+            groups.setdefault(key, []).append(index)
+        result[dimension] = {}
+        for key, indices in groups.items():
+            if len(indices) < minimum_rows:
+                continue
+            metrics = _metrics(actual[indices], expected[indices])
+            result[dimension][key] = {**metrics, "rows": len(indices)}
+    return result
+
+
 def _feature_importance(pipeline: Pipeline) -> tuple[list[str], list[dict[str, float]]]:
     names = [str(name) for name in pipeline.named_steps["preprocessor"].get_feature_names_out()]
     importances = pipeline.named_steps["model"].feature_importances_
@@ -203,10 +271,31 @@ def train_model(
     evaluation_pipeline.fit(train_x, train_y)
     holdout_expected = np.asarray(evaluation_pipeline.predict(holdout_x), dtype=float)
     candidate_metrics = _metrics(holdout_y, holdout_expected)
+    group_min_rows = max(2, int(model_config.get("group_metric_min_rows", 5)))
+    group_metrics = _group_metrics(
+        holdout_rows,
+        holdout_y,
+        holdout_expected,
+        minimum_rows=group_min_rows,
+    )
     train_expected = np.asarray(evaluation_pipeline.predict(train_x), dtype=float)
     training_threshold = _residual_threshold(train_y, train_expected)
     holdout_threshold = _residual_threshold(holdout_y, holdout_expected)
     threshold = max(training_threshold, holdout_threshold)
+    threshold_min_rows = max(3, int(model_config.get("context_threshold_min_rows", 12)))
+    thresholds = _context_thresholds(
+        train_rows,
+        train_y,
+        train_expected,
+        minimum_rows=threshold_min_rows,
+    )
+    thresholds["global"] = threshold
+    context_floor = threshold * float(model_config.get("context_threshold_floor_multiplier", 0.75))
+    for dimension in ("equipment_recipe", "equipment", "recipe"):
+        thresholds[dimension] = {
+            key: max(float(value), context_floor)
+            for key, value in thresholds[dimension].items()
+        }
 
     baseline = GradientBoostingRegressor(loss="huber", n_estimators=120, random_state=42)
     baseline.fit(np.asarray([[float(row["use_time_total"])] for row in train_rows]), train_y)
@@ -240,6 +329,7 @@ def train_model(
         "version": version,
         "pipeline": final_pipeline,
         "threshold": threshold,
+        "thresholds": thresholds,
         "include_seasoning": include_seasoning,
         "feature_names": feature_names,
         "feature_importance": importance,
@@ -271,6 +361,12 @@ def train_model(
             "production_holdout": production_metrics,
             "production_evaluation_error": production_error,
             "holdout_rows": len(holdout_rows),
+            "group_metrics": group_metrics,
+            "context_thresholds": thresholds,
+            "data_time_range": {
+                "start": min(str(row["observed_at"]) for row in rows),
+                "end": max(str(row["observed_at"]) for row in rows),
+            },
             "passes_comparison": passes_comparison,
             "residual_threshold": threshold,
             "training_residual_threshold": training_threshold,

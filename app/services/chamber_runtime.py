@@ -3,13 +3,25 @@ from __future__ import annotations
 
 import statistics
 import threading
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.services import chamber_storage
+from app.services import chamber_storage, storage
 from app.services.chamber_generator import load_chamber_config
-from app.services.chamber_training import load_artifact, predict_rows, resolve_artifact_path, train_model
+from app.services.chamber_data_quality import ChamberDataQualityGate, VALID
+from app.services.chamber_training import (
+    load_artifact,
+    predict_rows,
+    resolve_artifact_path,
+    resolve_threshold,
+    train_model,
+)
+from app.services.process_ops import project_chamber_anomaly
+
+
+logger = logging.getLogger(__name__)
 
 
 class ChamberRuntime:
@@ -18,6 +30,8 @@ class ChamberRuntime:
         self._lock = threading.RLock()
         self._bundle: dict[str, Any] | None = None
         self._bundle_version: str | None = None
+        self.data_quality = ChamberDataQualityGate(self.config)
+        self._ewma_abs_error: dict[str, float] = {}
 
     def reset_cache(self) -> None:
         with self._lock:
@@ -42,7 +56,34 @@ class ChamberRuntime:
 
     def process_sample(self, sample: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
-            telemetry = chamber_storage.insert_telemetry(sample)
+            quality_result = self.data_quality.validate(sample)
+            audited_sample = {
+                **sample,
+                "data_quality_status": quality_result.status,
+                "data_quality_issues": quality_result.issues,
+            }
+            self._persist_lifecycle_events(sample)
+            self._persist_data_quality_events(sample, quality_result.aggregate_events)
+            telemetry = chamber_storage.insert_telemetry(audited_sample) if quality_result.persistable else None
+            if quality_result.status != VALID:
+                return {
+                    "state": f"DATA_QUALITY_{quality_result.status}",
+                    "reason": "data_quality_gate",
+                    "data_quality": {
+                        "status": quality_result.status,
+                        "issues": quality_result.issues,
+                    },
+                    "telemetry": telemetry,
+                    "prediction": None,
+                }
+            if telemetry is None:
+                return {
+                    "state": "DATA_QUALITY_REJECT",
+                    "reason": "unpersistable_sample",
+                    "data_quality": {"status": quality_result.status, "issues": quality_result.issues},
+                    "telemetry": None,
+                    "prediction": None,
+                }
             if telemetry["machine_state"] != "running" or telemetry["quality"] != "good":
                 return {"state": "SKIPPED", "reason": "non_running_or_bad_quality", "telemetry": telemetry, "prediction": None}
 
@@ -73,7 +114,7 @@ class ChamberRuntime:
             expected = float(predict_rows(bundle, [telemetry])[0])
             actual = float(telemetry["resistance"])
             residual = actual - expected
-            threshold = float(production["threshold"])
+            threshold, threshold_context = resolve_threshold(bundle, telemetry)
             abs_error = abs(residual)
             prediction = chamber_storage.insert_prediction(
                 {
@@ -90,7 +131,122 @@ class ChamberRuntime:
                     "is_anomaly": abs_error > threshold,
                 }
             )
-            return {"state": "LIVE", "telemetry": telemetry, "prediction": prediction}
+            equipment_id = str(telemetry["equipment_id"])
+            alpha = float(self.config["model"].get("ewma_alpha", 0.30))
+            previous_ewma = self._ewma_abs_error.get(equipment_id, abs_error)
+            ewma_score = alpha * abs_error + (1.0 - alpha) * previous_ewma
+            self._ewma_abs_error[equipment_id] = ewma_score
+            ewma_threshold = threshold * float(self.config["model"].get("ewma_threshold_multiplier", 0.90))
+            detections = [
+                chamber_storage.insert_anomaly_detection(
+                    {
+                        "prediction_id": prediction["id"],
+                        "detector_name": "robust_mad",
+                        "score": abs_error,
+                        "threshold": threshold,
+                        "is_anomaly": abs_error > threshold,
+                        "context_key": threshold_context,
+                        "observed_at": telemetry["observed_at"],
+                        "metadata": {"primary": True, "residual": residual},
+                    }
+                ),
+                chamber_storage.insert_anomaly_detection(
+                    {
+                        "prediction_id": prediction["id"],
+                        "detector_name": "ewma_abs_residual",
+                        "score": ewma_score,
+                        "threshold": ewma_threshold,
+                        "is_anomaly": ewma_score > ewma_threshold,
+                        "context_key": threshold_context,
+                        "observed_at": telemetry["observed_at"],
+                        "metadata": {"primary": False, "alpha": alpha},
+                    }
+                ),
+            ]
+            try:
+                project_chamber_anomaly(telemetry, prediction, detections=detections)
+            except Exception:  # noqa: BLE001
+                # The normalized event layer must never interrupt authoritative
+                # Chamber telemetry/prediction persistence.
+                logger.exception("Failed to project Chamber anomaly into process_events")
+            return {"state": "LIVE", "telemetry": telemetry, "prediction": prediction, "detections": detections}
+
+    def _persist_data_quality_events(
+        self,
+        sample: dict[str, Any],
+        aggregate_events: list[dict[str, Any]],
+    ) -> None:
+        for event in aggregate_events:
+            observed_at = str(sample.get("observed_at") or chamber_storage.utc_now())
+            timestamp_key = "".join(character for character in observed_at if character.isdigit())
+            code = str(event.get("code") or "unknown")
+            field = str(event.get("field") or "all")
+            storage.insert_process_event(
+                {
+                    "id": f"PROC-DQ-{sample.get('equipment_id') or 'UNKNOWN'}-{code}-{field}-{timestamp_key}",
+                    "process_step": "Etch",
+                    "equipment_id": sample.get("equipment_id") or "ETCH-UNKNOWN",
+                    "recipe_id": sample.get("recipe_id"),
+                    "lot_id": sample.get("lot_id"),
+                    "wafer_id": sample.get("wafer_id"),
+                    "observed_at": observed_at,
+                    "event_type": "data_quality",
+                    "severity": "critical" if event.get("severity") == "REJECT" else "warning",
+                    "source": "chamber_data_quality_gate",
+                    "metadata": {
+                        "subtype": code,
+                        "detail": event.get("detail"),
+                        "field": event.get("field"),
+                        "consecutive_count": event.get("count"),
+                        "interpretation": "Input quality issue; not a process anomaly.",
+                    },
+                }
+            )
+
+    def _persist_lifecycle_events(self, sample: dict[str, Any]) -> None:
+        for event in sample.get("lifecycle_events", []):
+            event_type = str(event.get("type") or "")
+            lot_id = str(event.get("lot_id") or "")
+            if not event_type or not lot_id:
+                continue
+            metadata = {
+                "current_wafer": event.get("wafer_id"),
+                "completed_wafers": int(event.get("completed_wafers") or 0),
+                "equipment_id": event.get("equipment_id"),
+                "recipe_id": event.get("recipe_id"),
+                "synthetic": True,
+            }
+            lot_payload: dict[str, Any] = {
+                "lot_id": lot_id,
+                "product_id": event.get("product_id") or "PRODUCT-DEMO",
+                "recipe_route": f"Etch:{event.get('recipe_id') or 'unknown'}",
+                "status": "completed" if event_type == "lot_completed" else "running",
+                "started_at": event.get("observed_at") if event_type == "lot_started" else None,
+                "completed_at": event.get("observed_at") if event_type == "lot_completed" else None,
+                "current_process_step": "Inspection" if event_type == "lot_completed" else "Etch",
+                "wafer_count": int(event.get("wafer_count") or self.config.get("lot", {}).get("wafer_count", 25)),
+                "metadata": metadata,
+                "updated_at": event.get("observed_at"),
+            }
+            storage.upsert_lot(lot_payload)
+            if event_type not in {"lot_started", "wafer_completed", "lot_completed"}:
+                continue
+            timestamp_key = "".join(character for character in str(event.get("observed_at") or "") if character.isdigit())
+            storage.insert_process_event(
+                {
+                    "id": f"PROC-LIFECYCLE-{lot_id}-{event_type}-{event.get('wafer_id') or 'LOT'}-{timestamp_key}",
+                    "process_step": "Etch",
+                    "equipment_id": event.get("equipment_id") or sample.get("equipment_id") or "ETCH-UNKNOWN",
+                    "recipe_id": event.get("recipe_id") or sample.get("recipe_id"),
+                    "lot_id": lot_id,
+                    "wafer_id": event.get("wafer_id"),
+                    "observed_at": event.get("observed_at") or sample.get("observed_at"),
+                    "event_type": event_type,
+                    "severity": "info",
+                    "source": "chamber_lifecycle_simulator",
+                    "metadata": {**metadata, "sample_count": event.get("sample_count")},
+                }
+            )
 
     def readiness(self) -> dict[str, Any]:
         model_config = self.config["model"]
@@ -160,15 +316,34 @@ class ChamberRuntime:
             )
             trained["metadata"]["trigger_type"] = trigger_type
             trained["metadata"]["readiness_at_trigger"] = readiness
-            if not bool(trained["metadata"].get("passes_comparison")):
-                return {
-                    "accepted": False,
-                    "reason": "candidate_failed_production_comparison",
-                    "candidate": trained,
-                    "readiness": readiness,
-                }
             model = chamber_storage.register_model(trained)
-            return {"accepted": True, "candidate": model, "readiness": readiness}
+            comparison_passed = bool(model["metadata"].get("passes_comparison"))
+            return {
+                "accepted": True,
+                "reason": "candidate_ready" if comparison_passed else "candidate_below_production",
+                "comparison_passed": comparison_passed,
+                "candidate": model,
+                "readiness": readiness,
+            }
+
+    def maybe_auto_retrain(self) -> dict[str, Any]:
+        """Train at most one automatic Staging candidate; promotion stays manual."""
+        if not bool(self.config["model"].get("auto_candidate_training", True)):
+            return {"accepted": False, "reason": "automatic_candidate_training_disabled"}
+        existing = chamber_storage.staging_model()
+        if existing is not None:
+            return {
+                "accepted": False,
+                "reason": "staging_candidate_already_exists",
+                "candidate": existing,
+            }
+        readiness = self.readiness()
+        if not bool(readiness.get("ready")):
+            return {"accepted": False, "reason": readiness.get("reason"), "readiness": readiness}
+        result = self.retrain(force=False, trigger_type="automatic")
+        if result.get("accepted") and result.get("candidate", {}).get("stage") != "Staging":
+            raise RuntimeError("Automatic retraining must only create a Staging candidate")
+        return result
 
     def promote(self, version: str) -> dict[str, Any]:
         with self._lock:
@@ -210,6 +385,9 @@ class ChamberRuntime:
             "state": "LIVE" if production and artifact_ok else ("MODEL_ERROR" if production else "WARMING_UP"),
             "telemetry_rows": telemetry_count,
             "prediction_rows": prediction_count,
+            "detection_rows": chamber_storage.count_rows("anomaly_detections"),
+            "detectors": chamber_storage.detector_summary(),
+            "data_quality": chamber_storage.data_quality_summary(),
             "clean_running_rows": clean_count,
             "bootstrap_required_rows": bootstrap_min,
             "bootstrap_progress": min(1.0, clean_count / max(bootstrap_min, 1)),

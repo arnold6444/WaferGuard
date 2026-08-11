@@ -91,9 +91,9 @@ function ImageEvidence({ title, badge, src, caption, tone = "stat" }) {
 }
 
 
-export default function WaferVisionView({ onOpenInspection }) {
+export default function WaferVisionView({ onOpenInspection, initialChamberId = null, embedded = false }) {
   const [detectorMode, setDetectorMode] = useState("comparison");
-  const [selectedChamberId, setSelectedChamberId] = useState(waferVision.anomalyChambers[0].id);
+  const [selectedChamberId, setSelectedChamberId] = useState(initialChamberId || waferVision.anomalyChambers[0].id);
   const [handoff, setHandoff] = useState({ status: "idle", message: "" });
   const { ingestVisionFinding } = useStream();
 
@@ -147,7 +147,8 @@ export default function WaferVisionView({ onOpenInspection }) {
   };
 
   return (
-    <div className="vision-page">
+    <div className={`vision-page${embedded ? " is-embedded" : ""}`}>
+      {embedded && <div className="source-notice is-demo"><Icon name="alert" size={13} />Proxy snapshot evidence · 선택 Wafer의 실시간 Vision inference가 아닙니다.</div>}
       <section className="panel vision-hero">
         <div className="vision-hero-copy">
           <div className="chamber-eyebrow"><span />WAFER IMAGE · CHAMBER ANOMALY</div>
@@ -227,7 +228,7 @@ export default function WaferVisionView({ onOpenInspection }) {
       <div className="chamber-grid chamber-grid-secondary">
         <Panel title={`${selectedChamber.label} · 시점별 영상 이상 점수`} icon="pulse" right={<span className="chamber-status chamber-status-high"><span />{selectedChamber.firstAnomaly} 최초</span>}>
           <div className="chamber-chart chamber-chart-md">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 258 }}>
               <ComposedChart data={trend} margin={{ top: 10, right: 12, bottom: 0, left: -8 }}>
                 <CartesianGrid stroke="var(--border-soft)" strokeDasharray="3 5" vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize: 9.5, fill: "var(--text-3)" }} axisLine={false} tickLine={false} interval={4} />

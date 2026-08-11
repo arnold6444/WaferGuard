@@ -90,6 +90,35 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS lots (
+                lot_id TEXT PRIMARY KEY,
+                product_id TEXT NOT NULL,
+                recipe_route TEXT NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                current_process_step TEXT NOT NULL,
+                wafer_count INTEGER NOT NULL,
+                metadata_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS process_events (
+                id TEXT PRIMARY KEY,
+                process_step TEXT NOT NULL,
+                equipment_id TEXT NOT NULL,
+                recipe_id TEXT,
+                lot_id TEXT,
+                wafer_id TEXT,
+                observed_at TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                metadata_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS handoff_reports (
                 id TEXT PRIMARY KEY,
                 shift_from TEXT NOT NULL,
@@ -167,6 +196,30 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_handoff_reports_schedule_key
             ON handoff_reports(schedule_key)
             WHERE schedule_key IS NOT NULL
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lots_status_started
+            ON lots(status, started_at)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_process_events_process_time
+            ON process_events(process_step, observed_at)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_process_events_equipment_time
+            ON process_events(equipment_id, observed_at)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_process_events_lot_time
+            ON process_events(lot_id, observed_at)
             """
         )
     seed_model_registry()
@@ -586,6 +639,139 @@ def insert_alert(severity: str, channel: str, content: str) -> None:
             (alert_id, severity, channel, content, utc_now()),
         )
     _publish_alert(severity, content)
+
+
+def upsert_lot(lot: dict[str, object]) -> dict[str, object]:
+    """Create or update the Lot operating record used across process and quality."""
+    timestamp = str(lot.get("updated_at") or utc_now())
+    lot_id = str(lot["lot_id"])
+    existing = get_lot(lot_id)
+    metadata = dict(existing.get("metadata", {})) if existing else {}
+    if isinstance(lot.get("metadata"), dict):
+        metadata.update(lot["metadata"])
+    record = {
+        "lot_id": lot_id,
+        "product_id": str(lot.get("product_id") or (existing or {}).get("product_id") or "PRODUCT-DEMO"),
+        "recipe_route": str(lot.get("recipe_route") or (existing or {}).get("recipe_route") or "Etch"),
+        "status": str(lot.get("status") or (existing or {}).get("status") or "running"),
+        "started_at": str(lot.get("started_at") or (existing or {}).get("started_at") or timestamp),
+        "completed_at": lot.get("completed_at", (existing or {}).get("completed_at")),
+        "current_process_step": str(lot.get("current_process_step") or (existing or {}).get("current_process_step") or "Etch"),
+        "wafer_count": int(lot.get("wafer_count") or (existing or {}).get("wafer_count") or 25),
+        "metadata_json": json.dumps(metadata, ensure_ascii=False),
+        "created_at": str(lot.get("created_at") or (existing or {}).get("created_at") or timestamp),
+        "updated_at": timestamp,
+    }
+    columns = list(record)
+    with connect() as conn:
+        db.upsert(
+            conn,
+            "lots",
+            columns,
+            tuple(record[column] for column in columns),
+            conflict="lot_id",
+        )
+    return get_lot(record["lot_id"]) or {**record, "metadata": lot.get("metadata", {})}
+
+
+def get_lot(lot_id: str) -> dict[str, object] | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM lots WHERE lot_id = ?", (lot_id,)).fetchone()
+    if row is None:
+        return None
+    item = dict(row)
+    item["metadata"] = _json_or_default(item.pop("metadata_json", None), {})
+    return item
+
+
+def list_lots(*, status: str | None = None, limit: int = 100) -> list[dict[str, object]]:
+    safe_limit = max(1, min(int(limit), 1000))
+    where = "WHERE status = ?" if status else ""
+    params: tuple[object, ...] = (status, safe_limit) if status else (safe_limit,)
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM lots {where} ORDER BY started_at DESC, lot_id DESC LIMIT ?",
+            params,
+        ).fetchall()
+    items: list[dict[str, object]] = []
+    for row in rows:
+        item = dict(row)
+        item["metadata"] = _json_or_default(item.pop("metadata_json", None), {})
+        items.append(item)
+    return items
+
+
+def insert_process_event(event: dict[str, object]) -> dict[str, object]:
+    """Persist a process-agnostic event without changing source telemetry tables."""
+    record = {
+        "id": str(event["id"]),
+        "process_step": str(event["process_step"]),
+        "equipment_id": str(event["equipment_id"]),
+        "recipe_id": event.get("recipe_id"),
+        "lot_id": event.get("lot_id"),
+        "wafer_id": event.get("wafer_id"),
+        "observed_at": str(event["observed_at"]),
+        "event_type": str(event["event_type"]),
+        "severity": str(event["severity"]),
+        "metadata_json": json.dumps(event.get("metadata", {}), ensure_ascii=False),
+        "source": str(event.get("source") or "runtime"),
+        "created_at": str(event.get("created_at") or utc_now()),
+    }
+    columns = list(record)
+    with connect() as conn:
+        db.upsert(conn, "process_events", columns, tuple(record[column] for column in columns))
+    return {**record, "metadata": json.loads(record["metadata_json"])}
+
+
+def list_process_events(
+    *,
+    process_step: str | None = None,
+    lot_id: str | None = None,
+    wafer_id: str | None = None,
+    recipe_id: str | None = None,
+    equipment_ids: list[str] | None = None,
+    observed_after: str | None = None,
+    observed_before: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, object]]:
+    where: list[str] = []
+    params: list[object] = []
+    if process_step:
+        where.append("process_step = ?")
+        params.append(process_step)
+    if lot_id:
+        where.append("lot_id = ?")
+        params.append(lot_id)
+    if wafer_id:
+        where.append("wafer_id = ?")
+        params.append(wafer_id)
+    if recipe_id:
+        where.append("recipe_id = ?")
+        params.append(recipe_id)
+    if equipment_ids:
+        placeholders = ", ".join(["?"] * len(equipment_ids))
+        where.append(f"equipment_id IN ({placeholders})")
+        params.extend(equipment_ids)
+    if observed_after:
+        where.append("observed_at >= ?")
+        params.append(observed_after)
+    if observed_before:
+        where.append("observed_at <= ?")
+        params.append(observed_before)
+    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    safe_limit = max(1, min(int(limit), 500))
+    params.append(safe_limit)
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM process_events {clause} ORDER BY observed_at DESC, created_at DESC LIMIT ?",
+            tuple(params),
+        ).fetchall()
+    items: list[dict[str, object]] = []
+    for row in rows:
+        item = dict(row)
+        item["metadata"] = _json_or_default(item.pop("metadata_json", None), {})
+        items.append(item)
+    return items
 
 
 def _publish_alert(severity: str, content: str) -> None:
@@ -1149,16 +1335,19 @@ def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
 
 BROWSABLE_TABLES: tuple[str, ...] = (
     "inspections",
+    "lots",
     "model_registry",
     "drift_events",
     "retraining_jobs",
     "alerts",
+    "process_events",
     "handoff_reports",
     "agent_traces",
     "pending_approvals",
     "rag_documents",
     "chamber_telemetry",
     "chamber_predictions",
+    "anomaly_detections",
     "chamber_model_registry",
 )
 
@@ -1172,6 +1361,7 @@ def db_overview() -> dict[str, object]:
             tables.append({"name": name, "row_count": count, "columns": columns})
     db_file = Path(DB_PATH)
     return {
+        "backend": db.backend(),
         "db_path": str(DB_PATH),
         "db_size_bytes": db_file.stat().st_size if db_file.exists() else 0,
         "tables": tables,
@@ -1191,7 +1381,7 @@ def browse_table(name: str, limit: int = 50, offset: int = 0) -> dict[str, objec
         elif "registered_at" in columns:
             order = "registered_at DESC"
         else:
-            order = "rowid DESC"
+            order = f"{columns[0]} DESC"
         rows = conn.execute(
             f"SELECT * FROM {name} ORDER BY {order} LIMIT ? OFFSET ?", (limit, offset)
         ).fetchall()

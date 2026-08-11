@@ -7,6 +7,12 @@ import { useStream } from "./SettingsContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
+function evidenceUrl(value) {
+  if (!value) return value;
+  if (/^https?:\/\//.test(value) || value.startsWith("/wafer-vision/")) return value;
+  return `${API_BASE}${value}`;
+}
+
 // Map backend result → display format (shared with AgentView)
 export function mapResult(r) {
   const card = r.action_card || {};
@@ -164,9 +170,9 @@ function AgentNudgeToast({ data, onGo, onClose }) {
   );
 }
 
-export default function InspectionView({ onOpenAgent }) {
+export default function InspectionView({ onOpenAgent, inspection = null, embedded = false }) {
   const { latest, tick, settings, updateSettings, inFlight, runOnce } = useStream();
-  const [insp, setInsp]         = useState(defaultInspection);
+  const [insp, setInsp]         = useState(inspection ? mapResult(inspection) : defaultInspection);
   const [scanning, setScanning] = useState(false);
   const scanTimer = useRef(null);
   const [nudge, setNudge]       = useState(null);
@@ -175,6 +181,11 @@ export default function InspectionView({ onOpenAgent }) {
 
   // pop a transient toast when a fresh Medium/High inspection arrives
   useEffect(() => {
+    if (embedded) return;
+    if (inspection) {
+      setInsp(mapResult(inspection));
+      return;
+    }
     if (!latest) return;
     if (lastNudgeTick.current === null) { lastNudgeTick.current = tick; return; } // skip first paint
     if (tick === lastNudgeTick.current) return;
@@ -184,21 +195,20 @@ export default function InspectionView({ onOpenAgent }) {
       clearTimeout(nudgeTimer.current);
       nudgeTimer.current = setTimeout(() => setNudge(null), 6000);
     }
-  }, [tick, latest]);
+  }, [tick, latest, inspection, embedded]);
   useEffect(() => () => clearTimeout(nudgeTimer.current), []);
 
   useEffect(() => {
+    if (embedded || inspection) return;
     if (!latest) return;
     setInsp(mapResult(latest));
     setScanning(true);
     if (scanTimer.current) clearTimeout(scanTimer.current);
     scanTimer.current = setTimeout(() => setScanning(false), 350);
     return () => { if (scanTimer.current) clearTimeout(scanTimer.current); };
-  }, [tick, latest]);
+  }, [tick, latest, embedded, inspection]);
 
   const hot = insp.riskLevel === "High" ? "cluster" : "edge";
-  const imageBase = `${API_BASE}`;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* meta strip */}
@@ -216,19 +226,27 @@ export default function InspectionView({ onOpenAgent }) {
             <div className="label-cap" style={{ fontSize: 9 }}>검사 시각</div>
             <div className="mono" style={{ fontSize: 11.5, color: "var(--text-2)" }}>{insp.startedAt?.slice(0,19)}</div>
           </div>
-          <span className="chip" title={`주기 ${settings.intervalMs}ms · 비정상률 ${(settings.anomalyRate*100).toFixed(0)}%`}
-            style={{ color: settings.enabled ? "var(--low)" : "var(--text-3)", borderColor: settings.enabled ? "var(--low)" : "var(--border-strong)" }}>
-            <StatusDot kind={settings.enabled ? "ok" : "idle"} />
-            {settings.enabled ? `스트림 ${(settings.intervalMs/1000).toFixed(1)}s` : "스트림 일시정지"}
-          </span>
-          <button className="btn" onClick={() => updateSettings({ enabled: !settings.enabled })} style={{ gap: 6 }}>
-            <Icon name={settings.enabled ? "pause" : "play"} size={14} />
-            {settings.enabled ? "일시정지" : "재개"}
-          </button>
-          <button className="btn btn-accent" onClick={runOnce} disabled={inFlight}>
-            <Icon name="refresh" size={14} style={inFlight ? { animation: "spin 1s linear infinite" } : undefined} />
-            {inFlight ? "검사 중…" : "1회 실행"}
-          </button>
+          {embedded ? (
+            <button className="btn btn-accent" onClick={() => onOpenAgent?.(insp.inspectionId)} disabled={!insp.inspectionId}>
+              <Icon name="bot" size={14} />AI Analysis에서 분석
+            </button>
+          ) : (
+            <>
+              <span className="chip" title={`주기 ${settings.intervalMs}ms · 비정상률 ${(settings.anomalyRate*100).toFixed(0)}%`}
+                style={{ color: settings.enabled ? "var(--low)" : "var(--text-3)", borderColor: settings.enabled ? "var(--low)" : "var(--border-strong)" }}>
+                <StatusDot kind={settings.enabled ? "ok" : "idle"} />
+                {settings.enabled ? `스트림 ${(settings.intervalMs/1000).toFixed(1)}s` : "스트림 일시정지"}
+              </span>
+              <button className="btn" onClick={() => updateSettings({ enabled: !settings.enabled })} style={{ gap: 6 }}>
+                <Icon name={settings.enabled ? "pause" : "play"} size={14} />
+                {settings.enabled ? "일시정지" : "재개"}
+              </button>
+              <button className="btn btn-accent" onClick={runOnce} disabled={inFlight}>
+                <Icon name="refresh" size={14} style={inFlight ? { animation: "spin 1s linear infinite" } : undefined} />
+                {inFlight ? "검사 중…" : "1회 실행"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -245,14 +263,14 @@ export default function InspectionView({ onOpenAgent }) {
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
             <figure style={{ margin: 0, textAlign: "center" }}>
               {insp.imageUrl
-                ? <img src={`${imageBase}${insp.imageUrl}`} alt="wafer map"
+                ? <img src={evidenceUrl(insp.imageUrl)} alt="wafer map"
                     style={{ width: 220, height: 220, objectFit: "contain", borderRadius: 8, background: "var(--panel-2)" }} />
                 : <WaferMap map={insp.waferMap} size={220} scanning={scanning} />}
               <figcaption style={{ fontSize: 10, color: "var(--text-3)", marginTop: 6 }}>Wafer Map · {insp.wafer}</figcaption>
             </figure>
             <figure style={{ margin: 0, textAlign: "center" }}>
               {insp.overlayUrl
-                ? <img src={`${imageBase}${insp.overlayUrl}`} alt="grad-cam"
+                ? <img src={evidenceUrl(insp.overlayUrl)} alt="grad-cam"
                     style={{ width: 220, height: 220, objectFit: "contain", borderRadius: 8, background: "#0b1a2e" }} />
                 : <GradCAM size={220} hot={hot} />}
               <figcaption style={{ fontSize: 10, color: "var(--text-3)", marginTop: 6 }}>Grad-CAM 활성화 맵</figcaption>

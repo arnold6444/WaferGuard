@@ -69,7 +69,7 @@ METROLOGY_WINDOWS = {
 }
 
 
-def build_process_context(request: InspectRequest) -> dict[str, object]:
+def build_process_context(request: InspectRequest, inspection_timestamp: str | None = None) -> dict[str, object]:
     context: dict[str, object] = {
         "lot_id": request.lot_id,
         "wafer_id": request.wafer_id,
@@ -77,6 +77,10 @@ def build_process_context(request: InspectRequest) -> dict[str, object]:
         "process_step": request.process_step,
         "tool_id": request.equipment_id,
         "recipe_id": request.recipe_id,
+        "process_timestamp": request.process_timestamp.isoformat() if request.process_timestamp else None,
+        "inspection_timestamp": inspection_timestamp or (
+            request.inspection_timestamp.isoformat() if request.inspection_timestamp else None
+        ),
     }
     if request.vision_source:
         context["vision_evidence"] = {

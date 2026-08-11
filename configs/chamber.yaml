@@ -1,14 +1,55 @@
 stream:
   equipment_count: 10
   sample_interval_seconds: 1.0
-  recipe_duration_samples: 40
   seed: 42
+
+lot:
+  product_id: PRODUCT-DEMO
+  wafer_count: 25
+  wafer_process_samples:
+    min: 20
+    max: 60
+  startup_samples: 3
+  idle_samples_between_lots: 2
+  initial_transient_samples: 8
+  hold_probability_per_wafer: 0.02
+  hold_samples: 2
 
 maintenance:
   cleaning_enabled: true
   wafers_between_clean: 120
   cleaning_samples: 1
   seasoning_wafers: 12
+
+data_quality:
+  expected_interval_seconds: 1.0
+  interval_tolerance_seconds: 0.5
+  gap_warning_seconds: 3.0
+  stuck_consecutive_samples: 5
+  stuck_tolerance: 0.000001
+  aggregate_event_after: 2
+  required_fields:
+    - equipment_id
+    - observed_at
+    - recipe_id
+    - machine_state
+    - chamber_pressure
+    - source_rf_power
+    - bias_rf_power
+    - total_gas_flow
+    - chamber_temperature
+    - esc_temperature
+    - resistance
+  stuck_sensors: [chamber_pressure, chamber_temperature]
+  valid_states: [idle, startup, running, hold, alarm, cleaning, maintenance, shutdown]
+  physical_ranges:
+    chamber_pressure: [0.0, 100.0]
+    source_rf_power: [0.0, 2000.0]
+    bias_rf_power: [0.0, 1000.0]
+    total_gas_flow: [0.0, 1000.0]
+    chamber_temperature: [-20.0, 200.0]
+    esc_temperature: [-20.0, 100.0]
+    resistance: [0.0, 500.0]
 
 model:
   bootstrap_min_rows: 120
@@ -19,8 +60,15 @@ model:
   recent_prediction_count: 30
   drift_median_abs_error_multiplier: 1.50
   auto_train: true
+  auto_candidate_training: true
   auto_promote: false
   include_seasoning_feature: false
+  group_metric_min_rows: 5
+  context_threshold_min_rows: 12
+  context_threshold_floor_multiplier: 0.75
+  ewma_alpha: 0.30
+  ewma_threshold_multiplier: 0.90
+  auto_retrain_check_samples: 30
 
 # Demo coefficients and ranges below are synthetic. They are not Fab-calibrated
 # process limits or physical Resistance coefficients.
