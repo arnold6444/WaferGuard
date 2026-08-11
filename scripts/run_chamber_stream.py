@@ -18,6 +18,8 @@ from app.services.chamber_generator import (  # noqa: E402
 )
 from app.services.chamber_runtime import ChamberRuntime  # noqa: E402
 from app.services import chamber_storage  # noqa: E402
+from app.services.model_ops import chamber_operational_metrics  # noqa: E402
+from app.services.process_episode import episode_summary  # noqa: E402
 from app.services.storage import init_db  # noqa: E402
 
 
@@ -120,9 +122,6 @@ def _restore_generator_progress(
 
         state.lot_wafer_completed = max(0, wafer_number - 1)
         state.wafer_sample_index = processed_samples
-        # The historical random target was not persisted in older rows. Preserve
-        # already-consumed progress and use a bounded midpoint target rather than
-        # granting a brand-new full random cycle after every restart.
         state.wafer_target_samples = min(
             generator.wafer_samples_max,
             max(processed_samples + 1, midpoint_target),
@@ -182,6 +181,11 @@ def main() -> int:
         "holdout": production.get("metadata", {}).get("candidate_holdout"),
         "use_time_only_holdout": production.get("metadata", {}).get("use_time_only_holdout"),
     }
+    operational = chamber_operational_metrics(
+        limit=max(200, rounds * args.equipment_count),
+        model_version=str(production["version"]) if production else None,
+    )
+    episodes = episode_summary()
     result = {
         "rounds": rounds,
         "equipment_count": args.equipment_count,
@@ -195,6 +199,8 @@ def main() -> int:
             "production_model": compact_production,
             "readiness": full_status["readiness"],
         },
+        "operational_performance": operational,
+        "anomaly_episodes": episodes,
         "auto_retraining": auto_retraining,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
