@@ -10,6 +10,7 @@ from app.services.process_runtime import (
     load_config,
     vision_features,
 )
+from app.services.process_stream_live import _live_metrics
 from app.services.process_temporal import (
     TEMPORAL_GENERATOR_VERSION,
     TemporalProcessGenerator,
@@ -103,3 +104,15 @@ def test_temporal_anomaly_types_change_runtime_features():
             normal_vector = normal.next()[0]
             anomaly_vector = anomalous.next(anomaly)[0]
             assert np.linalg.norm(anomaly_vector - normal_vector) > 1e-6, (process_id, anomaly)
+
+
+def test_live_metrics_use_only_supplied_history():
+    history = [
+        {"timeseries": {"ground_truth": False, "flag": False}, "vision": {"ground_truth": False, "flag": False}},
+        {"timeseries": {"ground_truth": True, "flag": True}, "vision": {"ground_truth": True, "flag": False}},
+    ]
+    metrics = _live_metrics(history)
+    assert metrics["rows"] == 4
+    assert metrics["precision"] == 1.0
+    assert metrics["recall"] == 0.5
+    assert metrics["scope"].startswith("current live history")
