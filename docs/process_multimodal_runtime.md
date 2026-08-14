@@ -9,10 +9,12 @@ WaferGuard의 기존 Etch Chamber runtime을 보존하면서 Photo, Deposition, 
   - 이전 값과의 연속성(AR)
   - Tag 간 correlation
   - 장비별 bias
+  - 8-sample rolling behavior
   - drift / change point / spike / stuck / oscillation / noise increase / correlation break
 - 공정별 wafer-like Vision synthetic generator
 - 정상 데이터 기반 후보 모델 학습
-- IsolationForest / OneClassSVM validation 비교
+- TS: Robust-Z / Mahalanobis / IsolationForest / OneClassSVM 비교
+- Vision: IsolationForest / OneClassSVM 비교
 - F2 우선 winner 선택
 - 실제 joblib artifact 저장
 - Production / Staging / Archived lifecycle
@@ -45,15 +47,28 @@ Vision defect의 `root_cause_tags`는 정답 원인이 아니라 RCA에서 먼�
 
 ## Time-series feature contract
 
-Photo / Deposition / CMP의 시계열 모델은 단일 시점 raw 값만 보지 않고 다음 synthetic feature를 함께 사용합니다.
+Photo / Deposition / CMP 시계열 모델은 단일 시점 raw 값만 보지 않고 다음 feature를 함께 사용합니다.
 
 ```text
 현재 Tag z-score
 + 직전 sample 대비 delta
-+ config에서 정의한 Tag 관계 error
++ config Tag 관계 error
++ 최근 8 sample 대비 rolling mean deviation
++ 최근 8 sample rolling std
 ```
 
-Generator와 학습/실시간 추론이 같은 feature contract(`temporal-correlated-v1`)를 사용합니다. 기존 독립-random 방식으로 학습된 Production artifact가 남아 있으면 runtime/MLOps가 temporal contract 모델로 교체합니다.
+Generator와 학습/실시간 추론이 같은 feature contract(`temporal-correlated-window-v2`)를 사용합니다. 이전 독립-random 또는 구버전 temporal Production artifact가 남아 있으면 runtime/MLOps가 현재 contract의 모델로 교체합니다.
+
+### TS candidate models
+
+Validation에서 다음 4개를 동일 데이터로 비교합니다.
+
+1. `robust_z_univariate` — feature별 robust z-score의 최대 편차
+2. `mahalanobis_multivariate` — shrinkage covariance 기반 다변량 거리
+3. `isolation_forest`
+4. `one_class_svm`
+
+Winner는 F2를 우선하고, 동률/비슷한 경우 false-positive rate와 precision을 함께 봅니다. `false_positive_per_hour_at_1hz`는 synthetic 1 Hz 가정의 비교 지표이며 실제 장비 sampling rate에 그대로 적용하면 안 됩니다.
 
 Anomaly 판단은 raw score의 부호가 아니라 threshold와의 차이로 봅니다.
 
@@ -63,7 +78,7 @@ margin < 0  -> normal
 margin >= 0 -> anomaly
 ```
 
-따라서 IsolationForest/OneClassSVM 계열의 raw score가 음수여도 정상일 수 있습니다.
+따라서 raw anomaly score가 음수여도 정상일 수 있습니다.
 
 ## Run live streams
 
@@ -106,7 +121,7 @@ outputs/process_runtime/<process>/live.json
 outputs/process_runtime/<process>/*.png
 ```
 
-Dashboard는 live snapshot을 2초마다 polling하여 정상 sample도 포함한 raw Tag/phase/Vision을 표시합니다.
+Dashboard는 live snapshot을 2초마다 polling하여 정상 sample도 포함한 raw Tag/phase/Vision을 표시합니다. Dashboard의 live precision/recall/F2는 과거 DB 누적과 섞지 않고 **현재 실행의 최근 live history**에서 계산합니다. PostgreSQL 원본 이력은 그대로 보존됩니다.
 
 ## Dashboard
 
@@ -121,20 +136,20 @@ Photo / Deposition / CMP Process Monitoring:
 - Vision score / threshold / margin / injected defect / Production model
 - RCA Tag 후보
 - PostgreSQL anomaly history
-- synthetic GT 기반 runtime precision / recall / F2
+- 현재 live history 기준 synthetic precision / recall / F2
 
 Etch는 기존 Chamber Resistance runtime과 전용 Dashboard를 유지합니다.
 
 ### Language / Theme
 
-Dashboard의 상단 또는 Settings에서 다음 값을 선택할 수 있습니다.
+Dashboard 상단 또는 Settings에서 다음 값을 선택할 수 있습니다.
 
 - Language: `한국어` / `English`
 - Appearance: `Light` / `Dark`
 
-선택값은 `localStorage`에 저장되어 새로고침 뒤에도 유지됩니다. Static UI의 탭/버튼/제목/설명은 선택한 언어 하나만 표시합니다. DB 레코드, RAG 문서, LLM 응답처럼 외부/동적 데이터의 원문 자체는 자동 번역하지 않습니다.
+선택값은 `localStorage`에 저장되어 새로고침 뒤에도 유지됩니다. Static UI의 탭/버튼/제목/설명은 선택한 언어 하나만 표시합니다. DB 레코드, RAG 문서, LLM 응답처럼 외부/동적 데이터 원문 자체는 자동 번역하지 않습니다.
 
-Theme은 header/sidebar/main/panel/table/input/chart 공통 CSS token을 사용합니다. 기존 stylesheet에서 dark token 뒤에 light `:root`가 다시 덮어쓰던 selector 문제를 별도 final theme layer로 수정했습니다.
+Theme은 header/sidebar/main/panel/table/input/chart 공통 CSS token을 사용합니다. 기존 stylesheet에서 dark token 뒤에 light `:root`가 다시 덮어쓰던 selector 문제를 final theme layer로 수정했습니다.
 
 ## Model lifecycle
 
@@ -168,7 +183,7 @@ Staging candidate:
 python scripts/manage_process_models.py retrain --process deposition --modality timeseries --force
 ```
 
-Validation은 IsolationForest / OneClassSVM을 비교해 F2를 우선합니다. Staging candidate가 Production보다 F2가 낮거나 false-positive rate가 0.02보다 더 악화되면 promotion gate가 거절합니다.
+Staging candidate가 기존 Production보다 F2가 낮거나 false-positive rate가 0.02보다 더 악화되면 promotion gate가 거절합니다.
 
 Production 승격:
 
