@@ -215,7 +215,7 @@ runtime/models/process/<process>/<modality>/<version>.joblib
 
 ## Verification
 
-GitHub Actions 검증은 다음 항목을 포함합니다.
+GitHub Actions 검증 항목:
 
 - Unit and regression tests (SQLite)
 - PostgreSQL integration test
