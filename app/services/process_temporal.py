@@ -10,7 +10,6 @@ All values and relationships are synthetic proxies, not Fab control limits.
 """
 from __future__ import annotations
 
-import json
 import math
 import uuid
 from typing import Any
@@ -66,13 +65,10 @@ class TemporalProcessGenerator:
             rho = float(np.clip(pair.get("rho", 0.0), -0.90, 0.90))
             matrix[i, j] = rho
             matrix[j, i] = rho
-        # Keep the configured matrix numerically positive-semidefinite even if
-        # future profile edits add incompatible pair coefficients.
         values, vectors = np.linalg.eigh(matrix)
         matrix = vectors @ np.diag(np.maximum(values, 1e-6)) @ vectors.T
         scale = np.sqrt(np.diag(matrix))
-        matrix = matrix / np.outer(scale, scale)
-        return matrix
+        return matrix / np.outer(scale, scale)
 
     def _phase(self) -> tuple[str, float, dict[str, float]]:
         phases = self.temporal.get("phases") or [{"name": "steady", "length": 60, "offsets": {}}]
@@ -129,7 +125,9 @@ class TemporalProcessGenerator:
             z[idx] += float(rule.get("shift_sigma", 7.0))
         elif kind == "stuck":
             if self._stuck_value is None:
-                self._stuck_value = float(z[idx])
+                # A stuck sensor freezes the last observed reading, not the new
+                # reading at the moment the fault starts.
+                self._stuck_value = float(self._prev_z[idx]) if self._prev_z is not None else float(z[idx])
             z[idx] = self._stuck_value
         elif kind == "oscillation":
             amplitude = float(rule.get("amplitude_sigma", 5.0))
@@ -216,19 +214,14 @@ def evaluate_temporal_candidates(process_id: str, *, seed: int | None = None) ->
     for name, model in legacy._candidate_models(resolved_seed).items():
         model.fit(train_x)
         threshold, metrics = legacy._best_threshold(legacy._scores(model, val_x), label_array, beta)
-        candidates.append(
-            {
-                "name": name,
-                "model": model,
-                "threshold": threshold,
-                **metrics,
-                "false_positive_per_hour": float(metrics["false_positive_rate"] * 3600.0),
-            }
-        )
-    candidates.sort(
-        key=lambda item: (item["f2"], -item["false_positive_rate"], item["precision"]),
-        reverse=True,
-    )
+        candidates.append({
+            "name": name,
+            "model": model,
+            "threshold": threshold,
+            **metrics,
+            "false_positive_per_hour": float(metrics["false_positive_rate"] * 3600.0),
+        })
+    candidates.sort(key=lambda item: (item["f2"], -item["false_positive_rate"], item["precision"]), reverse=True)
     return {
         "winner": candidates[0],
         "candidates": [{key: value for key, value in item.items() if key != "model"} for item in candidates],
@@ -263,8 +256,7 @@ def train_temporal_model(process_id: str, *, stage: str = "Staging", seed: int |
     if stage == "Production":
         with db.connect() as conn:
             conn.execute(
-                "UPDATE process_model_registry SET stage='Archived' "
-                "WHERE process_id=? AND modality='timeseries' AND stage='Production'",
+                "UPDATE process_model_registry SET stage='Archived' WHERE process_id=? AND modality='timeseries' AND stage='Production'",
                 (process_id,),
             )
     metadata = {
