@@ -7,49 +7,47 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.process_runtime import (
-    list_models,
-    production_model,
-    promote_model,
-    runtime_metrics,
+from app.services.process_runtime import list_models, production_model, promote_model, runtime_metrics
+from app.services.process_temporal import (
+    TEMPORAL_PROCESSES,
+    TEMPORAL_GENERATOR_VERSION,
+    ensure_temporal_production_model,
+    train_process_model,
 )
-from app.services.process_temporal import train_process_model
 
 
 def model_health(process_id: str, modality: str, *, limit: int = 500) -> dict[str, Any]:
     production = production_model(process_id, modality)
     runtime = runtime_metrics(process_id, modality, limit=limit)
     if production is None:
-        return {
-            "process_id": process_id,
-            "modality": modality,
-            "production": None,
-            "runtime": runtime,
-            "degraded": True,
-            "reason": "no_production_model",
-        }
+        return {"process_id": process_id, "modality": modality, "production": None, "runtime": runtime, "degraded": True, "reason": "no_production_model"}
+
+    if modality == "timeseries" and process_id in TEMPORAL_PROCESSES:
+        generator_version = production.get("metadata", {}).get("generator_version")
+        if generator_version != TEMPORAL_GENERATOR_VERSION:
+            return {
+                "process_id": process_id,
+                "modality": modality,
+                "production": production,
+                "runtime": runtime,
+                "degraded": True,
+                "reason": "generator_contract_stale",
+                "policy": {"required_generator_version": TEMPORAL_GENERATOR_VERSION},
+            }
 
     runtime_f2 = runtime.get("f2")
     runtime_fp = runtime.get("false_positive_rate")
     f2_floor = max(0.0, float(production["f2"]) - 0.10)
     fp_ceiling = min(1.0, float(production["false_positive_rate"]) + 0.10)
     enough_runtime = int(runtime.get("rows") or 0) >= 30 and runtime_f2 is not None
-    degraded = bool(
-        enough_runtime
-        and (
-            float(runtime_f2) < f2_floor
-            or (runtime_fp is not None and float(runtime_fp) > fp_ceiling)
-        )
-    )
+    degraded = bool(enough_runtime and (float(runtime_f2) < f2_floor or (runtime_fp is not None and float(runtime_fp) > fp_ceiling)))
     return {
         "process_id": process_id,
         "modality": modality,
         "production": production,
         "runtime": runtime,
         "degraded": degraded,
-        "reason": "runtime_metric_degradation" if degraded else (
-            "insufficient_runtime_gt" if not enough_runtime else "healthy"
-        ),
+        "reason": "runtime_metric_degradation" if degraded else ("insufficient_runtime_gt" if not enough_runtime else "healthy"),
         "policy": {
             "runtime_min_rows": 30,
             "f2_floor": f2_floor,
@@ -60,6 +58,10 @@ def model_health(process_id: str, modality: str, *, limit: int = 500) -> dict[st
 
 
 def train_candidate(process_id: str, modality: str, *, force: bool = False) -> dict[str, Any]:
+    if modality == "timeseries" and process_id in TEMPORAL_PROCESSES:
+        current = production_model(process_id, modality)
+        if current is None or current.get("metadata", {}).get("generator_version") != TEMPORAL_GENERATOR_VERSION:
+            ensure_temporal_production_model(process_id)
     health = model_health(process_id, modality)
     if not force and not health["degraded"] and health["reason"] != "insufficient_runtime_gt":
         return {"accepted": False, "reason": "production_healthy", "health": health}
@@ -78,13 +80,7 @@ def train_candidate(process_id: str, modality: str, *, force: bool = False) -> d
             and comparison["candidate_fp_rate"] <= comparison["production_fp_rate"] + 0.02
         )
     )
-    return {
-        "accepted": True,
-        "candidate": candidate,
-        "comparison": comparison,
-        "promotion_recommended": comparison["passes"],
-        "health_at_trigger": health,
-    }
+    return {"accepted": True, "candidate": candidate, "comparison": comparison, "promotion_recommended": comparison["passes"], "health_at_trigger": health}
 
 
 def promote_candidate(process_id: str, modality: str, version: str) -> dict[str, Any]:
@@ -98,13 +94,9 @@ def promote_candidate(process_id: str, modality: str, version: str) -> dict[str,
     production = production_model(process_id, modality)
     if production is not None:
         if float(target["f2"]) < float(production["f2"]):
-            raise ValueError(
-                f"Candidate F2 {target['f2']:.4f} is below Production F2 {production['f2']:.4f}"
-            )
+            raise ValueError(f"Candidate F2 {target['f2']:.4f} is below Production F2 {production['f2']:.4f}")
         if float(target["false_positive_rate"]) > float(production["false_positive_rate"]) + 0.02:
-            raise ValueError(
-                "Candidate false-positive rate is more than 0.02 above Production"
-            )
+            raise ValueError("Candidate false-positive rate is more than 0.02 above Production")
     return promote_model(process_id, modality, version)
 
 
