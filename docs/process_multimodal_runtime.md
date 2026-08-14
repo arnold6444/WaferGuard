@@ -147,9 +147,11 @@ Dashboard 상단 또는 Settings에서 다음 값을 선택할 수 있습니다.
 - Language: `한국어` / `English`
 - Appearance: `Light` / `Dark`
 
-선택값은 `localStorage`에 저장되어 새로고침 뒤에도 유지됩니다. Static UI의 탭/버튼/제목/설명은 선택한 언어 하나만 표시합니다. DB 레코드, RAG 문서, LLM 응답처럼 외부/동적 데이터 원문 자체는 자동 번역하지 않습니다.
+선택값은 `localStorage`에 저장되어 새로고침 뒤에도 유지됩니다. App shell과 이번 작업에서 직접 연결한 주요 workspace(Fab Overview, Process Monitoring, Wafer Quality shell, AI Analysis shell, MLOps workspace, Data/RAG browser, Settings)의 탭/버튼/제목/설명은 선택한 언어 하나만 표시합니다.
 
-Theme은 header/sidebar/main/panel/table/input/chart 공통 CSS token을 사용합니다. 기존 stylesheet에서 dark token 뒤에 light `:root`가 다시 덮어쓰던 selector 문제를 final theme layer로 수정했습니다.
+단, 기존 대형 legacy 하위 컴포넌트(예: 세부 Agent trace/Inspection/Vision legacy 화면)에 원래부터 저장되어 있던 일부 정적 한국어와 DB/RAG/LLM에서 들어오는 원문 데이터는 자동 번역하지 않습니다. 이 부분은 향후 전체 i18n 리팩터링 범위입니다.
+
+Theme은 header/sidebar/main/panel/table/input/chart 공통 CSS token을 사용합니다. 기존 stylesheet에서 dark token 뒤에 light `:root`가 다시 덮어쓰던 selector 문제를 final theme layer로 수정했고, 기존 Recharts의 고정색도 theme token으로 덮어써 dark/light에서 대비를 유지합니다.
 
 ## Model lifecycle
 
