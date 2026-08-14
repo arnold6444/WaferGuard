@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 
 from app.services import db, process_mlops, process_runtime, storage
-from app.services.process_temporal import TemporalProcessGenerator, simulate_temporal_sample
+from app.services.process_temporal import (
+    TEMPORAL_GENERATOR_VERSION,
+    TemporalProcessGenerator,
+    simulate_temporal_sample,
+)
 
 
 @pytest.fixture()
@@ -38,20 +42,19 @@ def test_runtime_persists_detection_and_uses_promoted_artifact(process_runtime_e
     assert first_row["ground_truth"] is True
     assert first_row["margin"] == pytest.approx(first_row["anomaly_score"] - first_row["threshold"])
     assert first_row["phase"]
+    assert first_row["window_size"] == 8
 
     production = process_runtime.production_model("deposition", "timeseries")
     assert production is not None
-    assert production["metadata"]["generator_version"] == "temporal-correlated-v1"
+    assert production["metadata"]["generator_version"] == TEMPORAL_GENERATOR_VERSION
     artifact = model_root / "deposition" / "timeseries" / f"{production['version']}.joblib"
     assert artifact.is_file()
 
     candidate_result = process_mlops.train_candidate("deposition", "timeseries", force=True)
     candidate = candidate_result["candidate"]
     assert candidate["stage"] == "Staging"
-    assert candidate["metadata"]["generator_version"] == "temporal-correlated-v1"
+    assert candidate["metadata"]["generator_version"] == TEMPORAL_GENERATOR_VERSION
 
-    # Same generator/training contract means a passing candidate can be promoted
-    # and the next inference really loads that artifact.
     if candidate_result["promotion_recommended"]:
         promoted = process_mlops.promote_candidate("deposition", "timeseries", candidate["version"])
         assert promoted["version"] == candidate["version"]
