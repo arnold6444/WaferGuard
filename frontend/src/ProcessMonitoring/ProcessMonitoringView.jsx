@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 import { Icon, Panel, SubTabs } from "../lib";
 import EtchMonitoring from "./EtchMonitoring";
+import GenericProcessMonitoring from "./GenericProcessMonitoring";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const TABS = [
@@ -11,6 +12,7 @@ const TABS = [
   { id: "anomaly", label: "이상", en: "Anomaly", icon: "alert" },
   { id: "model", label: "모델", en: "Model", icon: "box" },
 ];
+const MULTIMODAL_RUNTIME = new Set(["photo", "deposition", "cmp"]);
 
 function DemoProcess({ profile, section }) {
   const params = profile.parameters || [];
@@ -44,15 +46,21 @@ export default function ProcessMonitoringView({ target }) {
   }, [target]);
 
   const selected = useMemo(() => profiles.find(item => item.process_id === processId), [profiles, processId]);
+  const isRuntime = processId === "etch" || MULTIMODAL_RUNTIME.has(processId);
 
   return (
     <div>
       <div className="process-selector" role="list" aria-label="공정 선택">
-        {profiles.map(profile => <button type="button" key={profile.process_id} className={`focusable ${processId === profile.process_id ? "is-active" : ""}`} onClick={() => setProcessId(profile.process_id)}><span className={`status-dot ${profile.connection === "runtime" ? "status-normal" : "status-offline"}`} /><span>{profile.display_name}</span><small>{profile.connection === "runtime" ? "Connected" : "Demo"}</small></button>)}
+        {profiles.map(profile => {
+          const connected = profile.process_id === "etch" || MULTIMODAL_RUNTIME.has(profile.process_id);
+          return <button type="button" key={profile.process_id} className={`focusable ${processId === profile.process_id ? "is-active" : ""}`} onClick={() => setProcessId(profile.process_id)}><span className={`status-dot ${connected ? "status-normal" : "status-offline"}`} /><span>{profile.display_name}</span><small>{connected ? "Synthetic Runtime" : "Demo"}</small></button>;
+        })}
         {!profiles.length && <span className="chip">공정 profile을 불러오는 중…</span>}
       </div>
       <SubTabs tabs={TABS} active={tab} onChange={setTab} />
-      {processId === "etch" ? <EtchMonitoring section={tab} /> : selected ? <DemoProcess profile={selected} section={tab} /> : null}
+      {processId === "etch" ? <EtchMonitoring section={tab} /> : null}
+      {selected && MULTIMODAL_RUNTIME.has(processId) ? <GenericProcessMonitoring profile={selected} section={tab} /> : null}
+      {selected && !isRuntime ? <DemoProcess profile={selected} section={tab} /> : null}
     </div>
   );
 }
