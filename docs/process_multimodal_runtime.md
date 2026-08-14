@@ -15,7 +15,8 @@ WaferGuard의 기존 Etch Chamber runtime을 보존하면서 Photo, Etch, Deposi
 - 실시간 sample inference + GT 저장
 - 탐지 결과를 기존 `process_events`에 투영
 - Photo / Deposition / CMP Process Monitoring에서 anomaly event 실시간 polling
-- 같은 lot/equipment의 이후 Inspection 실행 시 기존 RCA Agent의 `related_process_events` evidence로 자동 연결
+- PostgreSQL `process_events`를 다시 조회해 관련 tag까지 기존 LangGraph Agent evidence로 넘기는 RCA bridge
+- 같은 lot/equipment의 이후 Inspection 실행 시 기존 RCA Agent의 `related_process_events` evidence로도 자동 연결
 
 > 모든 범위, 이미지, 성능 수치는 synthetic/proxy입니다. 실제 Fab control limit 또는 실제 공정 성능을 의미하지 않습니다.
 
@@ -53,6 +54,24 @@ python scripts/run_process_stream.py --process cmp --modality vision --samples 6
 `--modality both`에서 anomaly 이름이 한 modality에만 존재하면 해당 modality에만 GT가 주입됩니다.
 
 Photo / Deposition / CMP는 Process Monitoring에서 `process_events`를 2초마다 읽어 최근 시계열/비전 anomaly, score/threshold, 모델 버전, RCA 관련 tag 후보를 표시합니다. Etch는 기존 특화 Chamber 화면을 유지합니다.
+
+## PostgreSQL-backed RCA
+
+실시간 detector가 만든 결과는 먼저 `process_events`에 저장됩니다. RCA 실행 시 generator의 메모리 상태를 직접 쓰지 않고 PostgreSQL에서 같은 설비/Lot/Wafer의 최근 event를 다시 조회합니다.
+
+```powershell
+python scripts/run_process_rca.py --process cmp --equipment-id CMP-01 --lot-id LOT-MM-DEMO-001 --minutes 30
+```
+
+RCA evidence에는 다음이 포함됩니다.
+
+- time-series / vision modality
+- anomaly score / threshold
+- injected anomaly 또는 detected signal
+- process profile의 관련 tag 후보
+- 저장된 Vision image URL
+
+이 evidence는 기존 LangGraph Inspection Agent로 전달되어 `Observation / Possible Causes / Evidence / Recommended Checks / Recommended Action / Confidence` 형식으로 판단합니다. 관련 tag는 원인 확정값이 아니라 우선 확인할 후보입니다.
 
 ## Model lifecycle
 
