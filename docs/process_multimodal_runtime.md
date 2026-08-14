@@ -11,6 +11,7 @@ WaferGuard의 기존 Etch Chamber runtime을 보존하면서 Photo, Etch, Deposi
 - F2 우선 winner 선택
 - 실제 joblib artifact 저장
 - Production / Staging / Archived model lifecycle
+- runtime health 비교 / guarded promotion / rollback
 - 실시간 sample inference + GT 저장
 - 탐지 결과를 기존 `process_events`에 투영
 - 같은 lot/equipment의 이후 Inspection 실행 시 기존 RCA Agent의 `related_process_events` evidence로 자동 연결
@@ -58,13 +59,25 @@ python scripts/run_process_stream.py --process cmp --modality vision --samples 6
 python scripts/manage_process_models.py list --process deposition
 ```
 
-새 candidate 학습:
+Production 모델 초기 bootstrap:
 
 ```powershell
-python scripts/manage_process_models.py train --process deposition --modality vision
+python scripts/manage_process_models.py bootstrap --process deposition --modality vision
 ```
 
-학습 결과는 Staging으로 등록됩니다. Validation에서는 IsolationForest와 OneClassSVM을 비교하고 F2를 우선하여 winner를 선택합니다.
+runtime health 확인:
+
+```powershell
+python scripts/manage_process_models.py health --process deposition --modality vision
+```
+
+새 Staging candidate 학습:
+
+```powershell
+python scripts/manage_process_models.py retrain --process deposition --modality vision --force
+```
+
+Validation에서는 IsolationForest와 OneClassSVM을 비교하고 F2를 우선하여 winner를 선택합니다. Staging candidate가 기존 Production보다 F2가 낮거나 false-positive rate가 0.02보다 더 악화되면 promotion gate가 거절합니다.
 
 Staging candidate를 Production으로 승격:
 
@@ -73,6 +86,12 @@ python scripts/manage_process_models.py promote --process deposition --modality 
 ```
 
 승격 후 다음 inference부터 새 Production artifact가 사용됩니다.
+
+문제가 생기면 가장 최근 Archived 모델로 rollback:
+
+```powershell
+python scripts/manage_process_models.py rollback --process deposition --modality vision
+```
 
 ## Persistence
 
@@ -98,6 +117,8 @@ outputs/process_runtime/<process>/...
 ## Current boundary
 
 이번 runtime은 실데이터가 없는 공정의 학습/평가/MLOps 계약을 검증하기 위한 backend 실험 경로입니다. 기존 Etch Chamber runtime은 계속 더 현실적인 특화 시계열 경로로 유지합니다.
+
+현재 health/degradation 판단은 synthetic runtime GT가 있는 실험 경로용입니다. 실제 Fab에서는 ground truth 대신 시간 기반 validation, drift detector, delayed quality label 등으로 교체해야 합니다.
 
 다음 단계는 다음 두 가지입니다.
 
