@@ -19,11 +19,13 @@ from app.services.process_runtime import process_profiles, runtime_metrics, simu
 
 
 MAX_LIVE_HISTORY = 180
+GENERIC_DASHBOARD_PROCESSES = ("photo", "deposition", "cmp")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run synthetic multi-process telemetry/vision inference")
-    parser.add_argument("--process", choices=[p["process_id"] for p in process_profiles()], default="deposition")
+    choices = [p["process_id"] for p in process_profiles()]
+    parser.add_argument("--process", choices=[*choices, "all"], default="deposition")
     parser.add_argument("--modality", choices=["timeseries", "vision", "both"], default="both")
     parser.add_argument("--samples", type=int, default=60)
     parser.add_argument("--interval", type=float, default=1.0)
@@ -94,9 +96,8 @@ def _live_row(index: int, result: dict, anomaly: str | None) -> dict:
         }
     vision = result["results"].get("vision")
     if vision:
-        image_url = vision.get("image_url")
         row["vision"] = {
-            "image_url": image_url,
+            "image_url": vision.get("image_url"),
             "deviation_url": _deviation_map(vision.get("image_key"), result["process_id"], result["wafer_id"]),
             "features": vision.get("payload", {}),
             "flag": bool(vision.get("is_anomaly")),
@@ -126,40 +127,46 @@ def _write_live_snapshot(process_id: str, history: list[dict]) -> None:
     )
 
 
+def _run_one(process_id: str, args: argparse.Namespace, index: int, history: list[dict]) -> None:
+    anomaly = args.anomaly if args.anomaly and index >= args.anomaly_after else None
+    result = simulate_sample(
+        process_id,
+        modality=args.modality,
+        anomaly=anomaly,
+        equipment_id=args.equipment_id if args.process != "all" else None,
+        lot_id=args.lot_id,
+        wafer_id=f"W{index + 1:02d}",
+    )
+    history.append(_live_row(index + 1, result, anomaly))
+    del history[:-MAX_LIVE_HISTORY]
+    _write_live_snapshot(process_id, history)
+    summary = {
+        "index": index + 1,
+        "process": process_id,
+        "anomaly": anomaly,
+        "detections": {
+            name: {
+                "flag": row["is_anomaly"],
+                "score": round(row["anomaly_score"], 5),
+                "threshold": round(row["threshold"], 5),
+                "model": row["model_version"],
+            }
+            for name, row in result["results"].items()
+        },
+    }
+    print(json.dumps(summary, ensure_ascii=False))
+
+
 def main() -> None:
     args = parse_args()
-    history: list[dict] = []
+    process_ids = list(GENERIC_DASHBOARD_PROCESSES) if args.process == "all" else [args.process]
+    histories = {process_id: [] for process_id in process_ids}
     for index in range(max(1, args.samples)):
-        anomaly = args.anomaly if args.anomaly and index >= args.anomaly_after else None
-        result = simulate_sample(
-            args.process,
-            modality=args.modality,
-            anomaly=anomaly,
-            equipment_id=args.equipment_id,
-            lot_id=args.lot_id,
-            wafer_id=f"W{index + 1:02d}",
-        )
-        history.append(_live_row(index + 1, result, anomaly))
-        history = history[-MAX_LIVE_HISTORY:]
-        _write_live_snapshot(args.process, history)
-        summary = {
-            "index": index + 1,
-            "process": args.process,
-            "anomaly": anomaly,
-            "detections": {
-                name: {
-                    "flag": row["is_anomaly"],
-                    "score": round(row["anomaly_score"], 5),
-                    "threshold": round(row["threshold"], 5),
-                    "model": row["model_version"],
-                }
-                for name, row in result["results"].items()
-            },
-        }
-        print(json.dumps(summary, ensure_ascii=False))
+        for process_id in process_ids:
+            _run_one(process_id, args, index, histories[process_id])
         if args.interval > 0:
             time.sleep(args.interval)
-    print(json.dumps({"metrics": runtime_metrics(args.process)}, ensure_ascii=False))
+    print(json.dumps({"metrics": {pid: runtime_metrics(pid) for pid in process_ids}}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
