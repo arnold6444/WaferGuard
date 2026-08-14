@@ -52,10 +52,16 @@ def test_candidate_training_runs_for_both_modalities():
     assert time_result["winner"]["f2"] > 0.45
     assert vision_result["winner"]["f2"] > 0.7
     assert time_result["generator_version"] == TEMPORAL_GENERATOR_VERSION
-    assert {row["name"] for row in time_result["candidates"]} == {"isolation_forest", "one_class_svm"}
+    assert time_result["window_size"] == 8
+    assert {row["name"] for row in time_result["candidates"]} == {
+        "robust_z_univariate",
+        "mahalanobis_multivariate",
+        "isolation_forest",
+        "one_class_svm",
+    }
 
 
-def test_temporal_generator_is_continuous_and_phase_aware():
+def test_temporal_generator_is_continuous_phase_aware_and_windowed():
     generator = TemporalProcessGenerator("cmp", seed=19)
     rows = [generator.next() for _ in range(75)]
     motor = np.asarray([row[1]["motor_current"] for row in rows])
@@ -63,6 +69,8 @@ def test_temporal_generator_is_continuous_and_phase_aware():
     assert np.median(deltas) < 0.35
     phases = {row[3]["phase"] for row in rows}
     assert {"load", "ramp", "polish", "rinse"}.issubset(phases)
+    assert any(name.startswith("roll_mean_delta:") for name in generator.feature_names)
+    assert any(name.startswith("roll_std:") for name in generator.feature_names)
 
 
 def test_temporal_generator_preserves_configured_relationship_and_breaks_it_on_anomaly():
