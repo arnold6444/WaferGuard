@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 
-from app.services.process_runtime import list_models, process_profiles, promote_model, train_model
+from app.services.process_mlops import model_health, promote_candidate, rollback_model, train_candidate
+from app.services.process_runtime import list_models, process_profiles, train_model
 
 
 def parse_args() -> argparse.Namespace:
@@ -14,15 +15,27 @@ def parse_args() -> argparse.Namespace:
     list_cmd.add_argument("--process", default=None)
     list_cmd.add_argument("--modality", choices=["timeseries", "vision"], default=None)
 
-    train = sub.add_parser("train")
-    train.add_argument("--process", choices=[p["process_id"] for p in process_profiles()], required=True)
-    train.add_argument("--modality", choices=["timeseries", "vision"], required=True)
-    train.add_argument("--production", action="store_true")
+    health = sub.add_parser("health")
+    health.add_argument("--process", required=True)
+    health.add_argument("--modality", choices=["timeseries", "vision"], required=True)
+
+    bootstrap = sub.add_parser("bootstrap")
+    bootstrap.add_argument("--process", choices=[p["process_id"] for p in process_profiles()], required=True)
+    bootstrap.add_argument("--modality", choices=["timeseries", "vision"], required=True)
+
+    retrain = sub.add_parser("retrain")
+    retrain.add_argument("--process", choices=[p["process_id"] for p in process_profiles()], required=True)
+    retrain.add_argument("--modality", choices=["timeseries", "vision"], required=True)
+    retrain.add_argument("--force", action="store_true")
 
     promote = sub.add_parser("promote")
     promote.add_argument("--process", required=True)
     promote.add_argument("--modality", choices=["timeseries", "vision"], required=True)
     promote.add_argument("--version", required=True)
+
+    rollback = sub.add_parser("rollback")
+    rollback.add_argument("--process", required=True)
+    rollback.add_argument("--modality", choices=["timeseries", "vision"], required=True)
     return parser.parse_args()
 
 
@@ -30,14 +43,16 @@ def main() -> None:
     args = parse_args()
     if args.command == "list":
         result = list_models(args.process, args.modality)
-    elif args.command == "train":
-        result = train_model(
-            args.process,
-            args.modality,
-            stage="Production" if args.production else "Staging",
-        )
+    elif args.command == "health":
+        result = model_health(args.process, args.modality)
+    elif args.command == "bootstrap":
+        result = train_model(args.process, args.modality, stage="Production")
+    elif args.command == "retrain":
+        result = train_candidate(args.process, args.modality, force=args.force)
+    elif args.command == "promote":
+        result = promote_candidate(args.process, args.modality, args.version)
     else:
-        result = promote_model(args.process, args.modality, args.version)
+        result = rollback_model(args.process, args.modality)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
