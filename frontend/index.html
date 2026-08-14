@@ -3,10 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (() => {
+        try {
+          const prefs = JSON.parse(localStorage.getItem("waferguard.ui.preferences.v1") || "{}");
+          const theme = prefs.theme === "dark" ? "dark" : "light";
+          const language = prefs.language === "en" ? "en" : "ko";
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.lang = language;
+          document.documentElement.style.colorScheme = theme;
+        } catch (_) {}
+      })();
+    </script>
     <title>WaferGuard — Fab Quality Ops</title>
-    <meta name="description" content="챔버 저항 패턴과 웨이퍼 영상 이상을 하나의 운영 흐름에서 분석하는 WaferGuard Chamber AI" />
-    <meta property="og:title" content="WaferGuard — Chamber AI" />
-    <meta property="og:description" content="Resistance AI와 Vision AI를 Inspection Agent 판단 흐름으로 연결합니다." />
+    <meta name="description" content="WaferGuard Fab Quality Ops dashboard" />
+    <meta property="og:title" content="WaferGuard — Fab Quality Ops" />
+    <meta property="og:description" content="Process time-series, wafer vision, RCA, and MLOps in one operational workflow." />
     <meta property="og:image" content="/waferguard-social.png" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
