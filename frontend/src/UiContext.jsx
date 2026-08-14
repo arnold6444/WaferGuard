@@ -1,7 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { hasHangul, translateLegacyStatic } from "./legacyTranslations";
 
 const STORAGE_KEY = "waferguard.ui.preferences.v1";
 const DEFAULTS = { language: "ko", theme: "light" };
+const ORIGINAL_TEXT = new WeakMap();
 
 function loadPreferences() {
   try {
@@ -12,6 +14,28 @@ function loadPreferences() {
     };
   } catch {
     return DEFAULTS;
+  }
+}
+
+function applyLegacyLanguage(root, language) {
+  if (!root || typeof document === "undefined") return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const parent = node.parentElement;
+    if (!parent || parent.closest("script,style,pre,code,[data-no-auto-translate='true']")) continue;
+    if (language === "en") {
+      const raw = node.nodeValue || "";
+      if (!hasHangul(raw)) continue;
+      ORIGINAL_TEXT.set(node, raw);
+      const translated = translateLegacyStatic(raw);
+      if (translated !== raw) node.nodeValue = translated;
+    } else if (ORIGINAL_TEXT.has(node)) {
+      const original = ORIGINAL_TEXT.get(node);
+      if (node.nodeValue !== original) node.nodeValue = original;
+      ORIGINAL_TEXT.delete(node);
+    }
   }
 }
 
@@ -28,6 +52,26 @@ export function UiProvider({ children }) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)); } catch { /* ignore */ }
   }, [language, theme, preferences]);
 
+  useEffect(() => {
+    const root = document.getElementById("root");
+    if (!root) return undefined;
+    applyLegacyLanguage(root, language);
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === "characterData") {
+          applyLegacyLanguage(record.target.parentElement, language);
+          continue;
+        }
+        for (const node of record.addedNodes) {
+          if (node.nodeType === Node.TEXT_NODE) applyLegacyLanguage(node.parentElement, language);
+          else if (node.nodeType === Node.ELEMENT_NODE) applyLegacyLanguage(node, language);
+        }
+      }
+    });
+    observer.observe(root, { subtree: true, childList: true, characterData: true });
+    return () => observer.disconnect();
+  }, [language]);
+
   const setLanguage = useCallback((next) => {
     setPreferences(prev => ({ ...prev, language: next === "en" ? "en" : "ko" }));
   }, []);
@@ -42,14 +86,7 @@ export function UiProvider({ children }) {
 
   const text = useCallback((ko, en) => (language === "en" ? (en ?? ko) : ko), [language]);
 
-  const value = useMemo(() => ({
-    language,
-    theme,
-    setLanguage,
-    setTheme,
-    toggleTheme,
-    text,
-  }), [language, theme, setLanguage, setTheme, toggleTheme, text]);
+  const value = useMemo(() => ({ language, theme, setLanguage, setTheme, toggleTheme, text }), [language, theme, setLanguage, setTheme, toggleTheme, text]);
 
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }
