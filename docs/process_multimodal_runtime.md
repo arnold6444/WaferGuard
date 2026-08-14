@@ -213,6 +213,17 @@ python scripts/manage_process_models.py rollback --process deposition --modality
 runtime/models/process/<process>/<modality>/<version>.joblib
 ```
 
+## Verification
+
+최신 code-bearing head 기준 GitHub Actions에서 다음을 모두 통과했습니다.
+
+- Unit and regression tests (SQLite)
+- PostgreSQL integration test
+- Frontend install + production build
+- Python compile check
+
+테스트는 temporal continuity/phase, configured correlation과 correlation-break, 전체 TS anomaly 유형, 4-way candidate comparison, rolling feature contract, current-live metric scope, 실제 artifact 생성과 Staging→Production 교체까지 포함합니다.
+
 ## Current boundary
 
 이 runtime은 실데이터가 없는 공정에서 학습/평가/MLOps/RCA 계약을 검증하기 위한 synthetic 경로입니다. 현재 runtime F2/FP 기준도 synthetic GT 평가입니다. 실제 Fab에서는 시간 기반 holdout, drift detector, delayed quality label, 실제 recipe/equipment context로 교체해야 합니다.
