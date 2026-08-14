@@ -40,7 +40,8 @@ def test_runtime_persists_detection_and_uses_promoted_artifact(process_runtime_e
 
     production = process_runtime.production_model("deposition", "timeseries")
     assert production is not None
-    assert (model_root / f"{production['version']}.joblib").is_file()
+    artifact = model_root / "deposition" / "timeseries" / f"{production['version']}.joblib"
+    assert artifact.is_file()
 
     candidate_result = process_mlops.train_candidate("deposition", "timeseries", force=True)
     candidate = candidate_result["candidate"]
