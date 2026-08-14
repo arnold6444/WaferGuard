@@ -12,8 +12,8 @@ from app.services.process_runtime import (
     production_model,
     promote_model,
     runtime_metrics,
-    train_model,
 )
+from app.services.process_temporal import train_process_model
 
 
 def model_health(process_id: str, modality: str, *, limit: int = 500) -> dict[str, Any]:
@@ -63,7 +63,7 @@ def train_candidate(process_id: str, modality: str, *, force: bool = False) -> d
     health = model_health(process_id, modality)
     if not force and not health["degraded"] and health["reason"] != "insufficient_runtime_gt":
         return {"accepted": False, "reason": "production_healthy", "health": health}
-    candidate = train_model(process_id, modality, stage="Staging")
+    candidate = train_process_model(process_id, modality, stage="Staging")
     production = production_model(process_id, modality)
     comparison = {
         "candidate_f2": float(candidate["f2"]),
