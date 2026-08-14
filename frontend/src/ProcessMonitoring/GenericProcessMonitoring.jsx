@@ -1,4 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Icon, Panel } from "../lib";
 
@@ -9,6 +19,31 @@ const STEP_BY_PROCESS = {
   deposition: "Deposition",
   cmp: "CMP",
 };
+
+const TAG_LABELS = {
+  exposure_dose: "Exposure Dose",
+  focus_offset: "Focus Offset",
+  track_temperature: "Track Temp",
+  developer_temperature: "Developer Temp",
+  overlay_nm: "Overlay",
+  chamber_pressure: "Chamber Pressure",
+  substrate_temperature: "Substrate Temp",
+  precursor_flow: "Precursor Flow",
+  carrier_gas_flow: "Carrier Gas Flow",
+  rf_power: "RF Power",
+  deposition_time: "Deposition Time",
+  down_force: "Down Force",
+  platen_speed: "Platen Speed",
+  carrier_speed: "Carrier Speed",
+  slurry_flow: "Slurry Flow",
+  motor_current: "Motor Current",
+};
+
+function assetUrl(value) {
+  if (!value) return "";
+  if (/^https?:\/\//.test(value)) return value;
+  return `${API_BASE}${value.startsWith("/") ? value : `/${value}`}`;
+}
 
 function SourceNotice({ processId }) {
   return (
@@ -23,8 +58,8 @@ function EmptyState({ processId, error }) {
   return (
     <div className="panel process-empty">
       <Icon name="activity" size={22} />
-      <strong>{error || `${processId} runtime event를 기다리고 있습니다.`}</strong>
-      <code>python scripts/run_process_stream.py --process {processId} --modality both --samples 80 --interval 1</code>
+      <strong>{error || `${processId} runtime 데이터를 기다리고 있습니다.`}</strong>
+      <code>python scripts/run_process_stream.py --process {processId} --modality both --samples 300 --interval 1</code>
     </div>
   );
 }
@@ -42,6 +77,14 @@ function MetricCard({ label, value, unit, detail, tone = "accent" }) {
 
 function formatScore(value) {
   return value == null ? "—" : Number(value).toFixed(4);
+}
+
+function formatValue(value) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  const number = Number(value);
+  if (Math.abs(number) >= 100) return number.toFixed(1);
+  if (Math.abs(number) >= 10) return number.toFixed(2);
+  return number.toFixed(3);
 }
 
 function EventTable({ events }) {
@@ -67,23 +110,122 @@ function EventTable({ events }) {
   );
 }
 
+function TagTrendGrid({ history }) {
+  const series = useMemo(() => {
+    const rows = history
+      .filter(item => item.timeseries?.payload)
+      .map(item => ({
+        index: item.index,
+        time: item.observed_at?.slice(11, 19),
+        flag: Boolean(item.timeseries?.flag),
+        ...item.timeseries.payload,
+      }));
+    const latest = rows.at(-1) || {};
+    const keys = Object.keys(latest).filter(key => !["index", "time", "flag"].includes(key));
+    return { rows, keys };
+  }, [history]);
+
+  if (!series.rows.length) return <div className="process-list-empty">시계열 stream을 기다리고 있습니다.</div>;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: 12 }}>
+      {series.keys.map((tag, idx) => {
+        const latest = series.rows.at(-1)?.[tag];
+        return (
+          <div key={tag} className="panel" style={{ padding: 12, minHeight: 190 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", marginBottom: 8 }}>
+              <strong>{TAG_LABELS[tag] || tag}</strong>
+              <span className="mono">{formatValue(latest)}</span>
+            </div>
+            <div style={{ height: 145 }}>
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 260, height: 145 }}>
+                <LineChart data={series.rows} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
+                  <CartesianGrid stroke="var(--border-soft)" strokeDasharray="3 5" vertical={false} />
+                  <XAxis dataKey="time" tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} minTickGap={25} />
+                  <YAxis domain={["auto", "auto"]} tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={value => [formatValue(value), TAG_LABELS[tag] || tag]} />
+                  <Line type="monotone" dataKey={tag} name={TAG_LABELS[tag] || tag} stroke={idx % 2 ? "#3f7fbf" : "#172b4d"} strokeWidth={1.8} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function VisionViewer({ history }) {
+  const visionRows = useMemo(() => history.filter(item => item.vision?.image_url), [history]);
+  const latest = visionRows.at(-1);
+  if (!latest) return <div className="process-list-empty">Vision stream을 기다리고 있습니다.</div>;
+  const vision = latest.vision;
+  const recent = visionRows.slice(-8).reverse();
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1.1fr) minmax(280px, 1fr)", gap: 16 }}>
+      <div>
+        <div style={{ display: "grid", gridTemplateColumns: vision.deviation_url ? "1fr 1fr" : "1fr", gap: 10 }}>
+          <figure style={{ margin: 0 }}>
+            <img src={assetUrl(vision.image_url)} alt={`${latest.wafer_id} synthetic wafer`} style={{ width: "100%", borderRadius: 10, display: "block", background: "#050a10" }} />
+            <figcaption style={{ fontSize: 11, marginTop: 6, color: "var(--text-3)" }}>Synthetic Vision Input</figcaption>
+          </figure>
+          {vision.deviation_url && (
+            <figure style={{ margin: 0 }}>
+              <img src={assetUrl(vision.deviation_url)} alt={`${latest.wafer_id} deviation map`} style={{ width: "100%", borderRadius: 10, display: "block", background: "#050a10" }} />
+              <figcaption style={{ fontSize: 11, marginTop: 6, color: "var(--text-3)" }}>Deviation Map · 모델 localization 아님</figcaption>
+            </figure>
+          )}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 10 }}>
+          {recent.map(item => (
+            <div key={`${item.index}-${item.wafer_id}`} style={{ opacity: item.vision.flag ? 1 : 0.72 }}>
+              <img src={assetUrl(item.vision.image_url)} alt={item.wafer_id} style={{ width: "100%", display: "block", borderRadius: 6 }} />
+              <small className="mono">{item.wafer_id}{item.vision.flag ? " · ALERT" : ""}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="chamber-process-grid">
+          <div><span>Wafer</span><strong className="mono">{latest.wafer_id}</strong><em>{latest.observed_at?.slice(11, 19)}</em></div>
+          <div><span>Detection</span><strong>{vision.flag ? "ANOMALY" : "NORMAL"}</strong><em>{vision.ground_truth ? "GT injected" : "normal GT"}</em></div>
+          <div><span>Score</span><strong className="mono">{formatScore(vision.score)}</strong><em>threshold {formatScore(vision.threshold)}</em></div>
+          <div><span>Defect</span><strong>{vision.injected_anomaly || "—"}</strong><em>synthetic label</em></div>
+          <div><span>Model</span><strong className="mono">{vision.model || "—"}</strong><em>Production artifact</em></div>
+          <div><span>RCA Tags</span><strong>{vision.related_tags?.length || 0}</strong><em>{vision.related_tags?.join(", ") || "—"}</em></div>
+        </div>
+        <div className="source-notice" style={{ marginTop: 12 }}>
+          <Icon name="alert" size={13} />
+          현재 generic Vision 모델은 이미지 feature 기반 anomaly model입니다. 오른쪽 map은 입력의 공간적 deviation을 보여주는 진단용이며 모델 heatmap으로 해석하면 안 됩니다.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GenericProcessMonitoring({ profile, section = "overview" }) {
   const processId = profile.process_id;
   const processStep = STEP_BY_PROCESS[processId] || profile.display_name;
   const [events, setEvents] = useState([]);
+  const [live, setLive] = useState({ history: [], metrics: {} });
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/process/events?process_step=${encodeURIComponent(processStep)}&limit=160`);
-      if (!response.ok) throw new Error(`${profile.display_name} process event API를 확인해 주세요.`);
-      const body = await response.json();
+      const [eventResponse, liveResponse] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/process/events?process_step=${encodeURIComponent(processStep)}&limit=160`, { cache: "no-store" }),
+        fetch(`${API_BASE}/outputs/process_runtime/${processId}/live.json?t=${Date.now()}`, { cache: "no-store" }),
+      ]);
+      if (!eventResponse.ok) throw new Error(`${profile.display_name} process event API를 확인해 주세요.`);
+      const body = await eventResponse.json();
       setEvents(body.filter(item => item.source === "process_multimodal_synthetic_runtime"));
+      if (liveResponse.ok) setLive(await liveResponse.json());
       setError("");
     } catch (nextError) {
       setError(nextError.message || `${profile.display_name} runtime 데이터를 불러오지 못했습니다.`);
     }
-  }, [processStep, profile.display_name]);
+  }, [processId, processStep, profile.display_name]);
 
   useEffect(() => {
     load();
@@ -91,29 +233,30 @@ export default function GenericProcessMonitoring({ profile, section = "overview"
     return () => window.clearInterval(timer);
   }, [load]);
 
+  const history = live.history || [];
+  const latest = history.at(-1);
+  const latestTs = [...history].reverse().find(item => item.timeseries)?.timeseries;
+  const latestVision = [...history].reverse().find(item => item.vision)?.vision;
+  const connected = history.length > 0;
+
   const stats = useMemo(() => {
     const byEquipment = new Map();
     let timeSeries = 0;
     let vision = 0;
-    const versions = { timeseries: null, vision: null };
     for (const event of events) {
       const modality = event.metadata?.modality;
       if (modality === "timeseries") timeSeries += 1;
       if (modality === "vision") vision += 1;
-      if (modality && !versions[modality]) versions[modality] = event.metadata?.model_version || null;
       const current = byEquipment.get(event.equipment_id) || { equipment_id: event.equipment_id, events: 0, critical: 0, latest: event.observed_at };
       current.events += 1;
       if (event.severity === "critical") current.critical += 1;
       if (String(event.observed_at) > String(current.latest)) current.latest = event.observed_at;
       byEquipment.set(event.equipment_id, current);
     }
-    return { timeSeries, vision, versions, equipment: [...byEquipment.values()] };
+    return { timeSeries, vision, equipment: [...byEquipment.values()] };
   }, [events]);
 
-  const latest = events[0];
-  const params = profile.parameters || [];
-
-  if (error && !events.length) return <><SourceNotice processId={processId} /><EmptyState processId={processId} error={error} /></>;
+  if (error && !connected && !events.length) return <><SourceNotice processId={processId} /><EmptyState processId={processId} error={error} /></>;
 
   return (
     <div className="process-section">
@@ -123,63 +266,74 @@ export default function GenericProcessMonitoring({ profile, section = "overview"
         <>
           <section className="panel process-hero">
             <div>
-              <div className="chamber-eyebrow"><span />{processId.toUpperCase()} · TIME-SERIES + VISION</div>
-              <h2>{profile.display_name} 공정의 두 modality를 같은 anomaly event로 연결합니다.</h2>
-              <p>정상 synthetic 데이터로 모델을 학습하고, 실시간 추론 결과를 PostgreSQL process_events에 투영해 이후 Inspection/RCA에서 재사용합니다.</p>
+              <div className="chamber-eyebrow"><span />{processId.toUpperCase()} · LIVE TIME-SERIES + VISION</div>
+              <h2>{profile.display_name} 공정의 원본 synthetic 데이터와 탐지 결과를 같이 봅니다.</h2>
+              <p>stream → 실제 모델 artifact 추론 → PostgreSQL 저장과 동시에 최근 원본 Tag/Vision을 Dashboard에서 실시간 확인합니다.</p>
             </div>
-            <span className={`chamber-status ${events.length ? "chamber-status-low" : "chamber-status-med"}`}><span />{events.length ? "CONNECTED" : "WAITING"}</span>
+            <span className={`chamber-status ${connected ? "chamber-status-low" : "chamber-status-med"}`}><span />{connected ? "CONNECTED" : "WAITING"}</span>
           </section>
           <div className="fab-metrics">
-            <MetricCard label="Recent Events" value={events.length} unit="events" detail="PostgreSQL process_events" tone="high" />
-            <MetricCard label="Time-series" value={stats.timeSeries} unit="alerts" detail={stats.versions.timeseries || "no anomaly event yet"} />
-            <MetricCard label="Vision" value={stats.vision} unit="alerts" detail={stats.versions.vision || "no anomaly event yet"} tone="med" />
-            <MetricCard label="Equipment" value={stats.equipment.length} unit="tools" detail="event-bearing equipment" tone="low" />
+            <MetricCard label="Live Samples" value={history.length} unit="rows" detail={latest?.equipment_id || "stream waiting"} tone="low" />
+            <MetricCard label="Time-series Model" value={latestTs?.model || "—"} detail={latestTs ? `${latestTs.flag ? "anomaly" : "normal"} · score ${formatScore(latestTs.score)}` : "no stream"} />
+            <MetricCard label="Vision Model" value={latestVision?.model || "—"} detail={latestVision ? `${latestVision.flag ? "anomaly" : "normal"} · score ${formatScore(latestVision.score)}` : "no stream"} tone="med" />
+            <MetricCard label="Detected Events" value={events.length} unit="events" detail={`${stats.timeSeries} time-series · ${stats.vision} vision`} tone="high" />
           </div>
-          <Panel title={`${profile.display_name} parameter profile`} icon="layers" right={<span className="chip">SYNTHETIC PROFILE</span>}>
-            <div className="process-profile-grid">
-              {params.map(item => <div key={item.id}><span>{item.label}</span><strong className="mono">{item.unit}</strong><small>{item.normal_range}</small></div>)}
-            </div>
+          <Panel title={`${profile.display_name} · Live tag values`} icon="pulse" right={<span className="chip">2초 POLLING</span>}>
+            <TagTrendGrid history={history} />
           </Panel>
-          <Panel title={`최근 ${profile.display_name} anomaly`} icon="alert" right={<span className="chip">RCA EVIDENCE</span>}>
-            {events.length ? <EventTable events={events.slice(0, 8)} /> : <EmptyState processId={processId} />}
+          <Panel title={`${profile.display_name} · Live vision`} icon="layers" right={<span className="chip">INPUT + DEVIATION</span>}>
+            <VisionViewer history={history} />
           </Panel>
         </>
       )}
 
       {section === "equipment" && (
-        <Panel title={`${profile.display_name} equipment with detected events`} icon="cpu" right={<span className="chip">EVENT VIEW</span>}>
-          <div className="process-profile-grid">
-            {stats.equipment.map(item => <div key={item.equipment_id}><span className="mono">{item.equipment_id}</span><strong>{item.events} events</strong><small>{item.critical} critical · {item.latest?.slice(11, 19)}</small></div>)}
-            {!stats.equipment.length && <EmptyState processId={processId} />}
+        <>
+          <div className="fab-metrics">
+            <MetricCard label="Equipment" value={latest?.equipment_id || "—"} detail={latest?.lot_id || "waiting"} />
+            <MetricCard label="Latest Wafer" value={latest?.wafer_id || "—"} detail={latest?.observed_at || "waiting"} tone="low" />
+            <MetricCard label="TS State" value={latestTs?.flag ? "ANOMALY" : latestTs ? "NORMAL" : "—"} detail={latestTs?.injected_anomaly || "no injected anomaly"} tone={latestTs?.flag ? "high" : "low"} />
+            <MetricCard label="Vision State" value={latestVision?.flag ? "ANOMALY" : latestVision ? "NORMAL" : "—"} detail={latestVision?.injected_anomaly || "no injected defect"} tone={latestVision?.flag ? "high" : "low"} />
           </div>
-        </Panel>
+          <Panel title="Current telemetry values" icon="cpu" right={<span className="chip">RAW SYNTHETIC</span>}>
+            <div className="process-profile-grid">
+              {Object.entries(latestTs?.payload || {}).map(([tag, value]) => <div key={tag}><span>{TAG_LABELS[tag] || tag}</span><strong className="mono">{formatValue(value)}</strong><small>{tag}</small></div>)}
+              {!latestTs && <EmptyState processId={processId} />}
+            </div>
+          </Panel>
+        </>
       )}
 
       {section === "trend" && (
         <>
           <div className="fab-metrics">
-            <MetricCard label="Latest Score" value={formatScore(latest?.metadata?.anomaly_score)} detail={`threshold ${formatScore(latest?.metadata?.threshold)}`} tone="high" />
-            <MetricCard label="Modality" value={latest?.metadata?.modality || "—"} detail={latest?.event_type || "waiting"} />
-            <MetricCard label="GT Injected" value={latest?.metadata?.ground_truth ? "YES" : "NO"} detail={latest?.metadata?.injected_anomaly || "model-only detection"} tone="med" />
-            <MetricCard label="RCA tags" value={(latest?.metadata?.related_tags || []).length} unit="tags" detail={(latest?.metadata?.related_tags || []).join(", ") || "—"} tone="low" />
+            <MetricCard label="TS Score" value={formatScore(latestTs?.score)} detail={`threshold ${formatScore(latestTs?.threshold)}`} tone={latestTs?.flag ? "high" : "low"} />
+            <MetricCard label="Vision Score" value={formatScore(latestVision?.score)} detail={`threshold ${formatScore(latestVision?.threshold)}`} tone={latestVision?.flag ? "high" : "med"} />
+            <MetricCard label="Runtime Precision" value={live.metrics?.precision == null ? "—" : Number(live.metrics.precision).toFixed(3)} detail="synthetic injected GT" />
+            <MetricCard label="Runtime Recall" value={live.metrics?.recall == null ? "—" : Number(live.metrics.recall).toFixed(3)} detail={`F2 ${live.metrics?.f2 == null ? "—" : Number(live.metrics.f2).toFixed(3)}`} tone="high" />
           </div>
-          <Panel title="Detected score history" icon="pulse" right={<span className="chip">DETECTED EVENTS ONLY</span>}>
-            {events.length ? <EventTable events={events.slice(0, 30)} /> : <EmptyState processId={processId} />}
+          <Panel title={`${profile.display_name} · Tag trend`} icon="activity" right={<span className="chip">RAW VALUES</span>}>
+            <TagTrendGrid history={history} />
           </Panel>
         </>
       )}
 
       {section === "anomaly" && (
-        <Panel title={`${profile.display_name} multimodal anomaly history`} icon="alert" right={<span className="chip">TEMPORAL · NOT CAUSAL</span>}>
-          {events.length ? <EventTable events={events} /> : <EmptyState processId={processId} />}
-        </Panel>
+        <>
+          <Panel title={`${profile.display_name} · Vision inspection`} icon="layers" right={<span className="chip">LATEST INPUT</span>}>
+            <VisionViewer history={history} />
+          </Panel>
+          <Panel title={`${profile.display_name} multimodal anomaly history`} icon="alert" right={<span className="chip">POSTGRESQL EVENTS</span>}>
+            {events.length ? <EventTable events={events} /> : <div className="process-list-empty">현재 탐지된 anomaly event가 없습니다. 정상 데이터는 위 Live 화면에서 계속 확인할 수 있습니다.</div>}
+          </Panel>
+        </>
       )}
 
       {section === "model" && (
         <>
           <div className="fab-metrics">
-            <MetricCard label="Time-series Production" value={stats.versions.timeseries || "—"} detail="latest detected event model" />
-            <MetricCard label="Vision Production" value={stats.versions.vision || "—"} detail="latest detected event model" tone="med" />
+            <MetricCard label="Time-series Production" value={latestTs?.model || "—"} detail="actual inference artifact" />
+            <MetricCard label="Vision Production" value={latestVision?.model || "—"} detail="actual inference artifact" tone="med" />
             <MetricCard label="Selection Metric" value="F2" detail="Recall weighted candidate selection" tone="high" />
             <MetricCard label="Lifecycle" value="Staging → Prod" detail="guarded promotion + rollback" tone="low" />
           </div>
