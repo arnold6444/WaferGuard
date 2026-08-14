@@ -1,10 +1,9 @@
 """Stateful synthetic time-series runtime for Photo, Deposition, and CMP.
 
-This module upgrades the generic process telemetry path from independent random
-rows to continuous process cycles with phase effects, AR continuity, configured
-tag correlations, equipment bias, and persistent anomaly patterns.  The model
-is trained on features produced by the same generator used at runtime so the
-synthetic train/runtime distributions stay aligned.
+Generic process telemetry is continuous rather than independent random rows:
+process phases, AR continuity, configured tag relationships, equipment bias,
+persistent faults, and short rolling-window behavior are part of the feature
+contract used by both training and live inference.
 
 All values and relationships are synthetic proxies, not Fab control limits.
 """
@@ -12,22 +11,61 @@ from __future__ import annotations
 
 import math
 import uuid
+from collections import deque
 from typing import Any
 
 import joblib
 import numpy as np
+from sklearn.covariance import LedoitWolf
 
 from app.services import db
 from app.services import process_runtime as legacy
 
-TEMPORAL_GENERATOR_VERSION = "temporal-correlated-v1"
+TEMPORAL_GENERATOR_VERSION = "temporal-correlated-window-v2"
 TEMPORAL_PROCESSES = {"photo", "deposition", "cmp"}
+DEFAULT_WINDOW_SIZE = 8
+
+
+class RobustZScorer:
+    """Normal-only univariate baseline over the temporal feature vector."""
+
+    def fit(self, matrix: np.ndarray):
+        x = np.asarray(matrix, dtype=float)
+        self.center_ = np.median(x, axis=0)
+        mad = np.median(np.abs(x - self.center_), axis=0)
+        self.scale_ = np.maximum(1.4826 * mad, 1e-6)
+        return self
+
+    def decision_function(self, matrix: np.ndarray) -> np.ndarray:
+        x = np.asarray(matrix, dtype=float)
+        outlier = np.max(np.abs((x - self.center_) / self.scale_), axis=1)
+        return -outlier
+
+
+class MahalanobisScorer:
+    """Multivariate covariance baseline using shrinkage for stable inversion."""
+
+    def fit(self, matrix: np.ndarray):
+        self.covariance_ = LedoitWolf().fit(np.asarray(matrix, dtype=float))
+        return self
+
+    def decision_function(self, matrix: np.ndarray) -> np.ndarray:
+        return -np.asarray(self.covariance_.mahalanobis(np.asarray(matrix, dtype=float)), dtype=float)
+
+
+def _temporal_candidate_models(seed: int) -> dict[str, Any]:
+    candidates = {
+        "robust_z_univariate": RobustZScorer(),
+        "mahalanobis_multivariate": MahalanobisScorer(),
+    }
+    candidates.update(legacy._candidate_models(seed))
+    return candidates
 
 
 class TemporalProcessGenerator:
     """Generate one continuous synthetic equipment stream for one process."""
 
-    def __init__(self, process_id: str, *, seed: int = 42):
+    def __init__(self, process_id: str, *, seed: int = 42, window_size: int = DEFAULT_WINDOW_SIZE):
         config, profile = legacy._profile(process_id)
         if process_id not in TEMPORAL_PROCESSES:
             raise ValueError(f"Temporal generic runtime is not enabled for {process_id}")
@@ -41,9 +79,11 @@ class TemporalProcessGenerator:
         self.step = 0
         self.ar = float(self.temporal.get("ar", 0.90))
         self.noise_scale = float(self.temporal.get("noise_scale", 0.55))
+        self.window_size = max(3, int(window_size))
         self._noise = np.zeros(len(self.tags), dtype=float)
         self._equipment_bias = self.rng.normal(0.0, 0.10, len(self.tags))
         self._prev_z: np.ndarray | None = None
+        self._history: deque[np.ndarray] = deque(maxlen=self.window_size - 1)
         self._active_anomaly: str | None = None
         self._anomaly_age = 0
         self._stuck_value: float | None = None
@@ -53,7 +93,14 @@ class TemporalProcessGenerator:
             [f"z:{tag}" for tag in self.tags]
             + [f"delta:{tag}" for tag in self.tags]
             + [f"rel:{pair['a']}:{pair['b']}" for pair in self._pairs]
+            + [f"roll_mean_delta:{tag}" for tag in self.tags]
+            + [f"roll_std:{tag}" for tag in self.tags]
         )
+
+    @property
+    def cycle_length(self) -> int:
+        phases = self.temporal.get("phases") or [{"length": 60}]
+        return sum(max(1, int(phase.get("length", 1))) for phase in phases)
 
     def _correlation_matrix(self) -> np.ndarray:
         matrix = np.eye(len(self.tags), dtype=float)
@@ -73,8 +120,7 @@ class TemporalProcessGenerator:
     def _phase(self) -> tuple[str, float, dict[str, float]]:
         phases = self.temporal.get("phases") or [{"name": "steady", "length": 60, "offsets": {}}]
         lengths = [max(1, int(phase.get("length", 1))) for phase in phases]
-        cycle = sum(lengths)
-        position = self.step % cycle
+        position = self.step % sum(lengths)
         cursor = 0
         current_index = 0
         for idx, length in enumerate(lengths):
@@ -87,13 +133,13 @@ class TemporalProcessGenerator:
         local = position - cursor
         progress = local / max(1, lengths[current_index] - 1)
         smooth = progress * progress * (3.0 - 2.0 * progress)
-        offsets: dict[str, float] = {}
         current_offsets = current.get("offsets", {})
         previous_offsets = previous.get("offsets", {})
-        for tag in self.tags:
-            before = float(previous_offsets.get(tag, 0.0))
-            after = float(current_offsets.get(tag, 0.0))
-            offsets[tag] = before + (after - before) * smooth
+        offsets = {
+            tag: float(previous_offsets.get(tag, 0.0))
+            + (float(current_offsets.get(tag, 0.0)) - float(previous_offsets.get(tag, 0.0))) * smooth
+            for tag in self.tags
+        }
         return str(current.get("name", "steady")), float(progress), offsets
 
     def _apply_anomaly(self, z: np.ndarray, anomaly: str | None) -> tuple[np.ndarray, list[str]]:
@@ -125,8 +171,6 @@ class TemporalProcessGenerator:
             z[idx] += float(rule.get("shift_sigma", 7.0))
         elif kind == "stuck":
             if self._stuck_value is None:
-                # A stuck sensor freezes the last observed reading, not the new
-                # reading at the moment the fault starts.
                 self._stuck_value = float(self._prev_z[idx]) if self._prev_z is not None else float(z[idx])
             z[idx] = self._stuck_value
         elif kind == "oscillation":
@@ -152,23 +196,28 @@ class TemporalProcessGenerator:
 
         previous = self._prev_z if self._prev_z is not None else z.copy()
         delta = z - previous
-        relationship_errors = []
         index = {tag: idx for idx, tag in enumerate(self.tags)}
-        for pair in self._pairs:
-            a, b = pair["a"], pair["b"]
-            rho = float(pair.get("rho", 0.0))
-            relationship_errors.append(float(z[index[b]] - rho * z[index[a]]))
-        vector = np.concatenate([z, delta, np.asarray(relationship_errors, dtype=float)])
+        relationship_errors = np.asarray([
+            float(z[index[pair["b"]]] - float(pair.get("rho", 0.0)) * z[index[pair["a"]]])
+            for pair in self._pairs
+        ], dtype=float)
+        window_rows = [*self._history, z]
+        window = np.vstack(window_rows)
+        rolling_mean_delta = z - np.mean(window, axis=0)
+        rolling_std = np.std(window, axis=0)
+        vector = np.concatenate([z, delta, relationship_errors, rolling_mean_delta, rolling_std])
         payload = {
             tag: float(self.specs[tag]["mean"] + self.specs[tag]["std"] * z[idx])
             for idx, tag in enumerate(self.tags)
         }
+        self._history.append(z.copy())
         self._prev_z = z.copy()
         self.step += 1
         return vector, payload, related, {
             "phase": phase_name,
             "phase_progress": phase_progress,
             "generator_version": TEMPORAL_GENERATOR_VERSION,
+            "window_size": self.window_size,
         }
 
 
@@ -211,7 +260,7 @@ def evaluate_temporal_candidates(process_id: str, *, seed: int | None = None) ->
     label_array = np.asarray(labels, dtype=int)
 
     candidates = []
-    for name, model in legacy._candidate_models(resolved_seed).items():
+    for name, model in _temporal_candidate_models(resolved_seed).items():
         model.fit(train_x)
         threshold, metrics = legacy._best_threshold(legacy._scores(model, val_x), label_array, beta)
         candidates.append({
@@ -219,7 +268,7 @@ def evaluate_temporal_candidates(process_id: str, *, seed: int | None = None) ->
             "model": model,
             "threshold": threshold,
             **metrics,
-            "false_positive_per_hour": float(metrics["false_positive_rate"] * 3600.0),
+            "false_positive_per_hour_at_1hz": float(metrics["false_positive_rate"] * 3600.0),
         })
     candidates.sort(key=lambda item: (item["f2"], -item["false_positive_rate"], item["precision"]), reverse=True)
     return {
@@ -230,6 +279,7 @@ def evaluate_temporal_candidates(process_id: str, *, seed: int | None = None) ->
         "train_rows": len(train_x),
         "validation_rows": len(val_x),
         "generator_version": TEMPORAL_GENERATOR_VERSION,
+        "window_size": train_gen.window_size,
     }
 
 
@@ -251,6 +301,7 @@ def train_temporal_model(process_id: str, *, stage: str = "Staging", seed: int |
         "feature_names": result["feature_names"],
         "candidate_metrics": result["candidates"],
         "generator_version": TEMPORAL_GENERATOR_VERSION,
+        "window_size": result["window_size"],
     }
     joblib.dump(bundle, path)
     if stage == "Production":
@@ -266,23 +317,16 @@ def train_temporal_model(process_id: str, *, stage: str = "Staging", seed: int |
         "validation_rows": result["validation_rows"],
         "data_source": "synthetic_temporal_proxy",
         "generator_version": TEMPORAL_GENERATOR_VERSION,
+        "window_size": result["window_size"],
         "note": "Synthetic temporal/correlated validation only; not Fab-calibrated performance.",
     }
     record = {
-        "id": str(uuid.uuid4()),
-        "process_id": process_id,
-        "modality": "timeseries",
-        "version": version,
-        "stage": stage,
-        "model_name": winner["name"],
+        "id": str(uuid.uuid4()), "process_id": process_id, "modality": "timeseries",
+        "version": version, "stage": stage, "model_name": winner["name"],
         "artifact_path": str(path.relative_to(legacy.ROOT_DIR)),
-        "precision": winner["precision"],
-        "recall": winner["recall"],
-        "f2": winner["f2"],
-        "false_positive_rate": winner["false_positive_rate"],
-        "threshold": winner["threshold"],
-        "metadata_json": legacy._json(metadata),
-        "registered_at": legacy.utc_now(),
+        "precision": winner["precision"], "recall": winner["recall"], "f2": winner["f2"],
+        "false_positive_rate": winner["false_positive_rate"], "threshold": winner["threshold"],
+        "metadata_json": legacy._json(metadata), "registered_at": legacy.utc_now(),
     }
     columns = list(record)
     with db.connect() as conn:
@@ -319,16 +363,7 @@ def simulate_temporal_sample(
     seed: int | None = None,
 ) -> dict[str, Any]:
     if process_id not in TEMPORAL_PROCESSES:
-        return legacy.simulate_sample(
-            process_id,
-            modality=modality,
-            anomaly=anomaly,
-            equipment_id=equipment_id,
-            lot_id=lot_id,
-            wafer_id=wafer_id,
-            observed_at=observed_at,
-            seed=seed,
-        )
+        return legacy.simulate_sample(process_id, modality=modality, anomaly=anomaly, equipment_id=equipment_id, lot_id=lot_id, wafer_id=wafer_id, observed_at=observed_at, seed=seed)
     if modality not in {"timeseries", "vision", "both"}:
         raise ValueError("modality must be timeseries, vision, or both")
 
@@ -352,37 +387,16 @@ def simulate_temporal_sample(
         threshold = float(bundle["threshold"])
         flag = score >= threshold
         record = {
-            "id": f"PMM-{uuid.uuid4().hex}",
-            "process_id": process_id,
-            "process_step": profile["process_step"],
-            "modality": "timeseries",
-            "equipment_id": equipment,
-            "recipe_id": profile["recipe_id"],
-            "lot_id": lot_id,
-            "wafer_id": wafer_id,
-            "observed_at": timestamp,
-            "model_version": model["version"],
-            "anomaly_score": score,
-            "threshold": threshold,
-            "is_anomaly": int(flag),
-            "injected_anomaly": applied,
-            "ground_truth": int(bool(applied)),
-            "payload_json": legacy._json(payload),
-            "image_key": None,
+            "id": f"PMM-{uuid.uuid4().hex}", "process_id": process_id, "process_step": profile["process_step"],
+            "modality": "timeseries", "equipment_id": equipment, "recipe_id": profile["recipe_id"],
+            "lot_id": lot_id, "wafer_id": wafer_id, "observed_at": timestamp, "model_version": model["version"],
+            "anomaly_score": score, "threshold": threshold, "is_anomaly": int(flag), "injected_anomaly": applied,
+            "ground_truth": int(bool(applied)), "payload_json": legacy._json(payload), "image_key": None,
             "created_at": legacy.utc_now(),
         }
         legacy._save_sample(record)
         event = legacy._project_event(record, related)
-        row = {
-            **record,
-            "is_anomaly": flag,
-            "ground_truth": bool(applied),
-            "payload": payload,
-            "related_tags": related,
-            "event": event,
-            "margin": score - threshold,
-            **temporal_meta,
-        }
+        row = {**record, "is_anomaly": flag, "ground_truth": bool(applied), "payload": payload, "related_tags": related, "event": event, "margin": score - threshold, **temporal_meta}
         row.pop("payload_json", None)
         results["timeseries"] = row
 
@@ -390,28 +404,14 @@ def simulate_temporal_sample(
         vision_anomaly = anomaly if anomaly in profile["vision"]["defects"] else None
         if anomaly and vision_anomaly is None and modality == "vision":
             raise KeyError(f"Unknown vision defect: {anomaly}")
-        vision_result = legacy.simulate_sample(
-            process_id,
-            modality="vision",
-            anomaly=vision_anomaly,
-            equipment_id=equipment,
-            lot_id=lot_id,
-            wafer_id=wafer_id,
-            observed_at=timestamp,
-            seed=seed,
-        )
+        vision_result = legacy.simulate_sample(process_id, modality="vision", anomaly=vision_anomaly, equipment_id=equipment, lot_id=lot_id, wafer_id=wafer_id, observed_at=timestamp, seed=seed)
         vision_row = vision_result["results"]["vision"]
         vision_row["margin"] = float(vision_row["anomaly_score"] - vision_row["threshold"])
         results["vision"] = vision_row
 
     return {
-        "process_id": process_id,
-        "process_step": profile["process_step"],
-        "equipment_id": equipment,
-        "lot_id": lot_id,
-        "wafer_id": wafer_id,
-        "observed_at": timestamp,
-        "results": results,
+        "process_id": process_id, "process_step": profile["process_step"], "equipment_id": equipment,
+        "lot_id": lot_id, "wafer_id": wafer_id, "observed_at": timestamp, "results": results,
         "data_source": "synthetic_temporal_multimodal_runtime",
         "disclaimer": "Synthetic/proxy data and metrics; not Fab control limits.",
     }
