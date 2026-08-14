@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 
 from app.services import object_store
-from app.services.process_runtime import runtime_metrics
+from app.services.process_runtime import _metrics
 from app.services.process_temporal import TemporalProcessGenerator, simulate_temporal_sample
 
 MAX_LIVE_HISTORY = 180
@@ -72,6 +72,7 @@ def live_row(index: int, result: dict[str, Any], anomaly: str | None) -> dict[st
             "phase": ts.get("phase"),
             "phase_progress": ts.get("phase_progress"),
             "generator_version": ts.get("generator_version"),
+            "window_size": ts.get("window_size"),
         }
     vision = result["results"].get("vision")
     if vision:
@@ -93,14 +94,33 @@ def live_row(index: int, result: dict[str, Any], anomaly: str | None) -> dict[st
     return row
 
 
+def _live_metrics(history: list[dict[str, Any]]) -> dict[str, Any]:
+    labels: list[int] = []
+    predicted: list[int] = []
+    for item in history:
+        for modality in ("timeseries", "vision"):
+            row = item.get(modality)
+            if not row:
+                continue
+            labels.append(int(bool(row.get("ground_truth"))))
+            predicted.append(int(bool(row.get("flag"))))
+    if not labels:
+        return {"rows": 0, "precision": None, "recall": None, "f2": None, "false_positive_rate": None, "scope": "current live history"}
+    return {
+        "rows": len(labels),
+        **_metrics(np.asarray(labels, dtype=int), np.asarray(predicted, dtype=int), beta=2.0),
+        "scope": f"current live history (last {MAX_LIVE_HISTORY} ticks)",
+    }
+
+
 def write_live_snapshot(process_id: str, history: list[dict[str, Any]]) -> None:
     payload = {
         "process_id": process_id,
         "data_source": "synthetic_temporal_multimodal_runtime",
         "generated_at": history[-1]["observed_at"] if history else None,
         "history": history[-MAX_LIVE_HISTORY:],
-        "metrics": runtime_metrics(process_id),
-        "note": "Vision deviation map is diagnostic only. Margin = score - threshold; margin >= 0 is anomalous.",
+        "metrics": _live_metrics(history[-MAX_LIVE_HISTORY:]),
+        "note": "Vision deviation map is diagnostic only. Margin = score - threshold; margin >= 0 is anomalous. Metrics are scoped to this live history, not accumulated DB rows.",
     }
     object_store.put_bytes(
         f"process_runtime/{process_id}/live.json",
