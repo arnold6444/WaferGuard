@@ -10,7 +10,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.services.process_mlops import model_health, promote_candidate, rollback_model, train_candidate
-from app.services.process_runtime import list_models, process_profiles, train_model
+from app.services.process_runtime import list_models, process_profiles
+from app.services.process_temporal import train_process_model
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,7 +53,7 @@ def main() -> None:
     elif args.command == "health":
         result = model_health(args.process, args.modality)
     elif args.command == "bootstrap":
-        result = train_model(args.process, args.modality, stage="Production")
+        result = train_process_model(args.process, args.modality, stage="Production")
     elif args.command == "retrain":
         result = train_candidate(args.process, args.modality, force=args.force)
     elif args.command == "promote":
