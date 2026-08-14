@@ -215,7 +215,7 @@ runtime/models/process/<process>/<modality>/<version>.joblib
 
 ## Verification
 
-최신 code-bearing head 기준 GitHub Actions에서 다음을 모두 통과했습니다.
+GitHub Actions 검증은 다음 항목을 포함합니다.
 
 - Unit and regression tests (SQLite)
 - PostgreSQL integration test
