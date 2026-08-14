@@ -1,0 +1,109 @@
+runtime:
+  seed: 42
+  bootstrap_normal_samples: 240
+  validation_normal_samples: 120
+  validation_anomaly_samples: 100
+  image_size: 96
+  fbeta: 2.0
+
+profiles:
+  photo:
+    display_name: Photo
+    process_step: Lithography
+    equipment_prefix: PHOTO
+    recipe_id: PHOTO_DEMO_A
+    timeseries:
+      tags:
+        exposure_dose: {mean: 25.0, std: 0.30}
+        focus_offset: {mean: 0.0, std: 0.035}
+        track_temperature: {mean: 23.0, std: 0.18}
+        developer_temperature: {mean: 21.0, std: 0.15}
+        overlay_nm: {mean: 4.0, std: 0.45}
+      anomalies:
+        exposure_drift: {tag: exposure_dose, shift_sigma: 7.0}
+        focus_shift: {tag: focus_offset, shift_sigma: 8.0}
+        track_temp_drift: {tag: track_temperature, shift_sigma: 7.0}
+        overlay_shift: {tag: overlay_nm, shift_sigma: 7.0}
+    vision:
+      defects: [bridge, missing_pattern, misalignment, residue]
+      root_cause_tags:
+        bridge: [exposure_dose, focus_offset, developer_temperature]
+        missing_pattern: [exposure_dose, focus_offset]
+        misalignment: [overlay_nm, focus_offset]
+        residue: [developer_temperature, track_temperature]
+
+  etch:
+    display_name: Etch
+    process_step: Etch
+    equipment_prefix: ETCH
+    recipe_id: ETCH_OXIDE_A
+    timeseries:
+      tags:
+        chamber_pressure: {mean: 20.0, std: 0.35}
+        source_rf_power: {mean: 780.0, std: 8.0}
+        bias_rf_power: {mean: 165.0, std: 4.0}
+        total_gas_flow: {mean: 170.0, std: 2.8}
+        chamber_temperature: {mean: 58.0, std: 0.40}
+      anomalies:
+        pressure_drift: {tag: chamber_pressure, shift_sigma: 7.0}
+        rf_instability: {tag: source_rf_power, shift_sigma: 7.0}
+        bias_rf_shift: {tag: bias_rf_power, shift_sigma: 7.0}
+        gas_flow_drift: {tag: total_gas_flow, shift_sigma: 7.0}
+        temperature_drift: {tag: chamber_temperature, shift_sigma: 7.0}
+    vision:
+      defects: [over_etch, under_etch, residue, non_uniformity]
+      root_cause_tags:
+        over_etch: [source_rf_power, bias_rf_power, chamber_pressure]
+        under_etch: [source_rf_power, total_gas_flow, chamber_pressure]
+        residue: [total_gas_flow, chamber_temperature, chamber_pressure]
+        non_uniformity: [chamber_pressure, source_rf_power, chamber_temperature]
+
+  deposition:
+    display_name: Deposition
+    process_step: Deposition
+    equipment_prefix: DEP
+    recipe_id: CVD_DEMO_A
+    timeseries:
+      tags:
+        chamber_pressure: {mean: 4.5, std: 0.10}
+        substrate_temperature: {mean: 350.0, std: 1.8}
+        precursor_flow: {mean: 85.0, std: 1.4}
+        carrier_gas_flow: {mean: 220.0, std: 3.0}
+        rf_power: {mean: 420.0, std: 7.0}
+        deposition_time: {mean: 42.0, std: 0.6}
+      anomalies:
+        pressure_drift: {tag: chamber_pressure, shift_sigma: 7.0}
+        temperature_drift: {tag: substrate_temperature, shift_sigma: 7.0}
+        precursor_flow_drift: {tag: precursor_flow, shift_sigma: 7.0}
+        rf_power_shift: {tag: rf_power, shift_sigma: 7.0}
+    vision:
+      defects: [particle, pinhole, thickness_non_uniformity]
+      root_cause_tags:
+        particle: [precursor_flow, chamber_pressure]
+        pinhole: [substrate_temperature, precursor_flow, deposition_time]
+        thickness_non_uniformity: [substrate_temperature, precursor_flow, rf_power]
+
+  cmp:
+    display_name: CMP
+    process_step: CMP
+    equipment_prefix: CMP
+    recipe_id: CMP_DEMO_A
+    timeseries:
+      tags:
+        down_force: {mean: 4.2, std: 0.08}
+        platen_speed: {mean: 82.0, std: 1.2}
+        carrier_speed: {mean: 76.0, std: 1.0}
+        slurry_flow: {mean: 180.0, std: 2.5}
+        motor_current: {mean: 8.5, std: 0.18}
+      anomalies:
+        pressure_shift: {tag: down_force, shift_sigma: 7.0}
+        platen_speed_drift: {tag: platen_speed, shift_sigma: 7.0}
+        slurry_flow_drop: {tag: slurry_flow, shift_sigma: -7.0}
+        motor_load_rise: {tag: motor_current, shift_sigma: 7.0}
+    vision:
+      defects: [scratch, residue, dishing, erosion]
+      root_cause_tags:
+        scratch: [down_force, slurry_flow, motor_current]
+        residue: [slurry_flow, platen_speed]
+        dishing: [down_force, platen_speed, carrier_speed]
+        erosion: [down_force, slurry_flow, platen_speed]
