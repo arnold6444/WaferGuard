@@ -14,6 +14,7 @@ WaferGuard의 기존 Etch Chamber runtime을 보존하면서 Photo, Etch, Deposi
 - runtime health 비교 / guarded promotion / rollback
 - 실시간 sample inference + GT 저장
 - 탐지 결과를 기존 `process_events`에 투영
+- Photo / Deposition / CMP Process Monitoring에서 anomaly event 실시간 polling
 - 같은 lot/equipment의 이후 Inspection 실행 시 기존 RCA Agent의 `related_process_events` evidence로 자동 연결
 
 > 모든 범위, 이미지, 성능 수치는 synthetic/proxy입니다. 실제 Fab control limit 또는 실제 공정 성능을 의미하지 않습니다.
@@ -50,6 +51,8 @@ python scripts/run_process_stream.py --process cmp --modality vision --samples 6
 ```
 
 `--modality both`에서 anomaly 이름이 한 modality에만 존재하면 해당 modality에만 GT가 주입됩니다.
+
+Photo / Deposition / CMP는 Process Monitoring에서 `process_events`를 2초마다 읽어 최근 시계열/비전 anomaly, score/threshold, 모델 버전, RCA 관련 tag 후보를 표시합니다. Etch는 기존 특화 Chamber 화면을 유지합니다.
 
 ## Model lifecycle
 
@@ -116,11 +119,10 @@ outputs/process_runtime/<process>/...
 
 ## Current boundary
 
-이번 runtime은 실데이터가 없는 공정의 학습/평가/MLOps 계약을 검증하기 위한 backend 실험 경로입니다. 기존 Etch Chamber runtime은 계속 더 현실적인 특화 시계열 경로로 유지합니다.
+이번 runtime은 실데이터가 없는 공정의 학습/평가/MLOps 계약을 검증하기 위한 synthetic 실험 경로입니다. 기존 Etch Chamber runtime은 계속 더 현실적인 특화 시계열 경로로 유지합니다.
 
 현재 health/degradation 판단은 synthetic runtime GT가 있는 실험 경로용입니다. 실제 Fab에서는 ground truth 대신 시간 기반 validation, drift detector, delayed quality label 등으로 교체해야 합니다.
 
-다음 단계는 다음 두 가지입니다.
+Dashboard는 runtime anomaly evidence를 읽어 표시하지만 generic process model의 retrain/promote/rollback 실행은 아직 CLI를 사용합니다.
 
-1. 실제 이미지 데이터셋이 준비되면 handcrafted vision feature 대신 PatchCore/PaDiM/DINO 계열 artifact adapter를 같은 registry contract에 연결
-2. Dashboard에서 process/model/runtime metrics를 직접 조회하고 Staging → Production 승인 UI를 연결
+다음 실제 데이터 단계에서는 handcrafted vision feature를 PatchCore/PaDiM/DINO 계열 artifact adapter로 교체해 같은 registry contract를 유지하는 것이 다음 확장 지점입니다.
