@@ -132,14 +132,49 @@ export function buildDemoQuality() {
 }
 
 export function expandRuntimeLot(detail) {
-  const actual = new Map((detail?.wafers || []).map(item => [item.sequence, item]));
-  const total = Math.max(25, detail?.lot?.wafer_total || 25);
+  const qualityRows = detail?.wafers || [];
+  const fabRows = detail?.fab_trace?.wafers || [];
+  const fabRuns = detail?.fab_trace?.process_runs || [];
+  const qualityBySequence = new Map(qualityRows.map(item => {
+    const suffix = String(item.wafer_id || "").match(/-?W(\d+)$/i);
+    return [Number(item.sequence ?? item.wafer_index ?? suffix?.[1]), item];
+  }));
+  const sourceRows = fabRows.length ? fabRows.map(item => {
+    const suffix = String(item.wafer_id || "").match(/-?W(\d+)$/i);
+    const sequence = Number(item.wafer_index ?? suffix?.[1]);
+    const quality = qualityBySequence.get(sequence) || {};
+    const runs = fabRuns.filter(run => run.wafer_id === item.wafer_id);
+    const latestRun = runs.at(-1);
+    const fabStatus = String(item.status || "").toLowerCase();
+    const status = quality.status || (fabStatus === "hold" ? "warning" : fabStatus === "failed" ? "critical" : fabStatus === "queued" ? "not_inspected" : "normal");
+    return {
+      ...item,
+      ...quality,
+      wafer_id: item.wafer_id,
+      sequence,
+      status,
+      process_step: quality.process_step || latestRun?.process_step || item.current_process_step,
+      equipment_id: quality.equipment_id || latestRun?.equipment_id,
+      recipe_id: quality.recipe_id || latestRun?.recipe_id,
+      data_source: "fab_v2_persistence",
+    };
+  }) : qualityRows;
+  const rows = sourceRows.map(item => {
+    const suffix = String(item.wafer_id || "").match(/-?W(\d+)$/i);
+    const sequence = Number(item.sequence ?? item.wafer_index ?? suffix?.[1]);
+    return { ...item, sequence: Number.isFinite(sequence) && sequence > 0 ? sequence : null };
+  });
+  const actual = new Map(rows.filter(item => item.sequence).map(item => [item.sequence, item]));
+  const globalIdentity = rows.some(item => /^.+-W\d+$/i.test(String(item.wafer_id || "")));
+  const declaredTotal = Number(detail?.lot?.wafer_total || rows.length || 0);
+  const total = globalIdentity ? Math.max(declaredTotal, rows.length) : Math.max(25, declaredTotal || 25);
+  const prefix = globalIdentity ? `${detail?.lot?.lot_id || rows[0]?.lot_id || "LOT"}-W` : "W";
   const wafers = Array.from({ length: total }, (_, index) => actual.get(index + 1) || {
-    wafer_id: `W${String(index + 1).padStart(2, "0")}`,
+    wafer_id: `${prefix}${String(index + 1).padStart(2, "0")}`,
     sequence: index + 1,
     status: "not_inspected",
     risk_score: null,
     data_source: "runtime_inspection_db",
   });
-  return { ...detail, wafers };
+  return { ...detail, wafers, data_source: fabRows.length ? "fab_v2_persistence" : detail.data_source };
 }

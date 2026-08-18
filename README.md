@@ -67,6 +67,27 @@ python scripts/run_chamber_stream.py --equipment-count 3 --interval 0 --samples 
 python scripts/build_chamber_dashboard_data.py --input "/path/to/sample.csv" --output "frontend/src/data/chamberSample.json"
 ```
 
+### 🏗️ Virtual FAB Multimodal v2
+
+Photo → Etch → Deposition → CMP를 Lot/Wafer/Process Run identity로 연결하고, 각 run의 FDC telemetry → Metrology → Inspection → late fusion → Candidate RCA를 같은 trace로 저장합니다. 기본 transport는 Mosquitto QoS 1이며 Direct는 빠른 개발 확인용입니다.
+
+```powershell
+# PostgreSQL + MQTT
+docker compose up -d postgres mosquitto
+
+# 기본: MQTT, 1 Lot × 1 Wafer × 4공정
+python scripts/run_fab_stream.py --lots 1 --wafers-per-lot 1 --seed 42
+
+# 빠른 골격 확인: CMP 한 공정, Direct transport
+python scripts/run_fab_stream.py --lots 1 --wafers-per-lot 1 --process cmp --transport direct --seed 42
+
+# latent fault는 지정 cycle 이후에만 주입
+python scripts/run_fab_stream.py --lots 1 --wafers-per-lot 3 --process cmp `
+  --fault cmp_slurry_degradation --fault-after-cycle 1 --seed 42
+```
+
+생성되는 계수·이미지·점수는 pipeline 계약 검증용 synthetic proxy입니다. 이번 v2는 재학습이나 최고 성능이 아니라 교체 가능한 데이터 흐름을 제공합니다. 실제 명령과 로컬 데이터/notebook 사용법은 [`docs/RUN_LOCAL.md`](docs/RUN_LOCAL.md), 전체 연결 구조는 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)를 참고하세요.
+
 ### 🧭 Wafer Quality / Vision Evidence
 
 `Wafer Quality`는 runtime inspection DB를 Lot/Wafer 단위로 집계합니다. 데이터가 없을 때는 `frontend/src/data/waferVisionSample.json`과 대표 이미지를 `Demo / Proxy`로 명시해 상태판·timeline·누적 map·상세 evidence를 구성합니다.
@@ -164,7 +185,7 @@ WaferGuard는 로컬 PostgreSQL·로컬 object storage 구성을 표준으로 �
 ## Prerequisites
 
 | 도구 | 권장/최소 버전 |
-|------|----------------|
+|------|-----------|
 | Python | 3.11 |
 | Node.js | **20.19+ 또는 22.12+** (현재 Vite 7 기준) |
 | npm | 위 Node.js 설치에 포함된 최신 npm 권장 |
@@ -196,7 +217,7 @@ PostgreSQL backend 선택은 필수이며 연결에 실패해도 SQLite로 자�
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up -d postgres
+docker compose up -d postgres mosquitto
 docker compose ps
 ```
 
@@ -236,7 +257,13 @@ cd frontend
 npm run dev
 ```
 
-**터미널 3 — Chamber Live stream (선택)**
+**터미널 3 — Virtual FAB stream (선택, 기본 MQTT)**
+
+```bash
+python scripts/run_fab_stream.py --lots 1 --wafers-per-lot 1 --seed 42
+```
+
+기존 Etch 전용 Chamber stream도 계속 사용할 수 있습니다.
 
 ```bash
 python scripts/run_chamber_stream.py --equipment-count 3 --interval 1
@@ -253,7 +280,7 @@ Health    : http://127.0.0.1:8000/health
 현재 `/health` 응답:
 
 ```json
-{"status":"ok","service":"waferguard-api","database":{"backend":"postgres","status":"connected"}}
+{"status":"ok","service":"waferguard-api","database":{"backend":"postgres","status":"connected"},"fab":{"database_backend":"postgres","transport":{}}}
 ```
 
 ### 7. Synthetic Fab Scenario
@@ -282,7 +309,7 @@ npm run build
 
 | Method | Endpoint | 역할 |
 |--------|----------|------|
-| GET | `/health` | 서비스 상태 |
+| GET | `/health` | DB + FAB ingestion/detection 상태 |
 | POST | `/api/v1/inspect` | 검사 생성 + risk/action card + agent workflow |
 | GET | `/api/v1/inspections` | 최근 검사 목록 |
 | GET | `/api/v1/inspect/{id}/trace` | 검사 Agent trace |
@@ -292,6 +319,13 @@ npm run build
 | GET | `/api/v1/rag/search` | 과거 사례 검색 |
 | GET | `/api/v1/db/overview` | workflow DB 개요 |
 | GET | `/api/v1/fab/overview` | runtime + demo 출처를 포함한 Fab Overview read model |
+| GET | `/api/v1/fab/equipment` | FAB equipment/unit/recipe inventory |
+| GET | `/api/v1/fab/wafers/{wafer_id}/trace` | Wafer의 전체 공정 route와 multimodal evidence |
+| GET | `/api/v1/fab/process-runs/{process_run_id}` | Process Run telemetry/metrology/inspection/fusion 상세 |
+| GET | `/api/v1/process/{process_id}/live` | process/equipment/unit/recipe별 live read model |
+| GET | `/api/v1/fab/rca/{process_run_id}` | Candidate root cause와 evidence |
+| GET | `/api/v1/fab/metrics` | MQTT/DB/latency/anomaly/model version 지표 |
+| GET | `/api/v1/fab/analysis/latest` | 로컬 notebook/CLI 분석 요약(feature importance/correlation) |
 | GET | `/api/v1/process/profiles` | 8대 공정 parameter/profile metadata |
 | GET | `/api/v1/process/events` | 공통 process event와 시간 범위 조회 |
 | GET | `/api/v1/lots` | Lot 원장/status 조회 |
@@ -336,6 +370,14 @@ app/
     chamber_runtime.py       # warm-up/inference/retrain/promote lifecycle
     chamber_data_quality.py  # VALID/WARNING/REJECT + aggregate events
     fab_scenario.py          # Generator → inspection 분리 orchestration
+    fab_generator.py         # 4공정 Virtual FAB + lifecycle/fault propagation
+    fab_mqtt.py              # QoS 1 MQTT/direct 공통 transport router
+    fab_storage.py           # v2 additive schema/read model/consumer receipt
+    fab_detection.py         # signed detector output + context fallback
+    fab_models.py            # 외부 학습 artifact 계약 검증 + Staging 등록
+    fab_fusion.py            # calibrated late fusion
+    fab_rca.py               # persisted evidence-only Candidate RCA
+    fab_orchestrator.py      # Lot/Wafer route → transport → fusion/RCA
     process_ops.py           # process profile/event/Fab/Quality read model
     automation.py            # periodic automation tick
     storage.py               # workflow persistence / DB browser

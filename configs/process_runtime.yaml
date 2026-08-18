@@ -1,0 +1,184 @@
+runtime:
+  seed: 42
+  bootstrap_normal_samples: 240
+  validation_normal_samples: 120
+  validation_anomaly_samples: 100
+  image_size: 96
+  fbeta: 2.0
+
+profiles:
+  photo:
+    display_name: Photo
+    process_step: Lithography
+    equipment_prefix: PHOTO
+    recipe_id: PHOTO_DEMO_A
+    timeseries:
+      tags:
+        exposure_dose: {mean: 25.0, std: 0.30}
+        focus_offset: {mean: 0.0, std: 0.035}
+        track_temperature: {mean: 23.0, std: 0.18}
+        developer_temperature: {mean: 21.0, std: 0.15}
+        overlay_nm: {mean: 4.0, std: 0.45}
+      temporal:
+        ar: 0.90
+        noise_scale: 0.55
+        correlations:
+          - {a: track_temperature, b: developer_temperature, rho: 0.55}
+          - {a: focus_offset, b: overlay_nm, rho: 0.45}
+          - {a: exposure_dose, b: focus_offset, rho: -0.30}
+        phases:
+          - name: idle
+            length: 10
+            offsets: {exposure_dose: -1.5, focus_offset: 0.2, track_temperature: -0.7, developer_temperature: -0.6, overlay_nm: 0.2}
+          - name: coat_track
+            length: 15
+            offsets: {exposure_dose: -0.7, focus_offset: 0.1, track_temperature: 0.5, developer_temperature: 0.2, overlay_nm: 0.1}
+          - name: expose
+            length: 20
+            offsets: {exposure_dose: 0.8, focus_offset: -0.1, track_temperature: 0.3, developer_temperature: 0.0, overlay_nm: -0.2}
+          - name: develop
+            length: 15
+            offsets: {exposure_dose: -0.5, focus_offset: 0.0, track_temperature: 0.2, developer_temperature: 0.8, overlay_nm: 0.1}
+      anomalies:
+        exposure_drift: {kind: drift, tag: exposure_dose, shift_sigma: 7.0, drift_per_step: 0.45}
+        focus_shift: {kind: change_point, tag: focus_offset, shift_sigma: 7.0}
+        track_temp_drift: {kind: drift, tag: track_temperature, shift_sigma: 6.0, drift_per_step: 0.35}
+        overlay_shift: {kind: change_point, tag: overlay_nm, shift_sigma: 6.0}
+        sensor_spike: {kind: spike, tag: exposure_dose, shift_sigma: 8.0}
+        sensor_stuck: {kind: stuck, tag: focus_offset}
+        focus_oscillation: {kind: oscillation, tag: focus_offset, amplitude_sigma: 5.0, frequency: 0.9}
+        noise_increase: {kind: noise_increase, tag: overlay_nm, noise_sigma: 4.0}
+        correlation_break: {kind: correlation_break, tags: [focus_offset, overlay_nm], break_sigma: 4.5}
+    vision:
+      defects: [bridge, missing_pattern, misalignment, residue]
+      root_cause_tags:
+        bridge: [exposure_dose, focus_offset, developer_temperature]
+        missing_pattern: [exposure_dose, focus_offset]
+        misalignment: [overlay_nm, focus_offset]
+        residue: [developer_temperature, track_temperature]
+
+  etch:
+    display_name: Etch
+    process_step: Etch
+    equipment_prefix: ETCH
+    recipe_id: ETCH_OXIDE_A
+    timeseries:
+      tags:
+        chamber_pressure: {mean: 20.0, std: 0.35}
+        source_rf_power: {mean: 780.0, std: 8.0}
+        bias_rf_power: {mean: 165.0, std: 4.0}
+        total_gas_flow: {mean: 170.0, std: 2.8}
+        chamber_temperature: {mean: 58.0, std: 0.40}
+      anomalies:
+        pressure_drift: {tag: chamber_pressure, shift_sigma: 7.0}
+        rf_instability: {tag: source_rf_power, shift_sigma: 7.0}
+        bias_rf_shift: {tag: bias_rf_power, shift_sigma: 7.0}
+        gas_flow_drift: {tag: total_gas_flow, shift_sigma: 7.0}
+        temperature_drift: {tag: chamber_temperature, shift_sigma: 7.0}
+    vision:
+      defects: [over_etch, under_etch, residue, non_uniformity]
+      root_cause_tags:
+        over_etch: [source_rf_power, bias_rf_power, chamber_pressure]
+        under_etch: [source_rf_power, total_gas_flow, chamber_pressure]
+        residue: [total_gas_flow, chamber_temperature, chamber_pressure]
+        non_uniformity: [chamber_pressure, source_rf_power, chamber_temperature]
+
+  deposition:
+    display_name: Deposition
+    process_step: Deposition
+    equipment_prefix: DEP
+    recipe_id: CVD_DEMO_A
+    timeseries:
+      tags:
+        chamber_pressure: {mean: 4.5, std: 0.10}
+        substrate_temperature: {mean: 350.0, std: 1.8}
+        precursor_flow: {mean: 85.0, std: 1.4}
+        carrier_gas_flow: {mean: 220.0, std: 3.0}
+        rf_power: {mean: 420.0, std: 7.0}
+        deposition_time: {mean: 42.0, std: 0.6}
+      temporal:
+        ar: 0.92
+        noise_scale: 0.50
+        correlations:
+          - {a: precursor_flow, b: carrier_gas_flow, rho: 0.65}
+          - {a: substrate_temperature, b: rf_power, rho: 0.50}
+          - {a: chamber_pressure, b: precursor_flow, rho: 0.40}
+        phases:
+          - name: pumpdown
+            length: 12
+            offsets: {chamber_pressure: -1.8, substrate_temperature: -0.8, precursor_flow: -1.7, carrier_gas_flow: -1.5, rf_power: -1.8, deposition_time: -0.5}
+          - name: heatup
+            length: 18
+            offsets: {chamber_pressure: -0.8, substrate_temperature: 0.5, precursor_flow: -0.8, carrier_gas_flow: -0.5, rf_power: -0.7, deposition_time: 0.0}
+          - name: deposition
+            length: 30
+            offsets: {chamber_pressure: 0.4, substrate_temperature: 0.5, precursor_flow: 0.7, carrier_gas_flow: 0.5, rf_power: 0.8, deposition_time: 0.4}
+          - name: purge
+            length: 12
+            offsets: {chamber_pressure: 0.2, substrate_temperature: 0.1, precursor_flow: -1.2, carrier_gas_flow: 0.8, rf_power: -1.5, deposition_time: 0.2}
+      anomalies:
+        pressure_drift: {kind: drift, tag: chamber_pressure, shift_sigma: 7.0, drift_per_step: 0.40}
+        temperature_drift: {kind: drift, tag: substrate_temperature, shift_sigma: 6.0, drift_per_step: 0.30}
+        precursor_flow_drift: {kind: drift, tag: precursor_flow, shift_sigma: 7.0, drift_per_step: 0.45}
+        rf_power_shift: {kind: change_point, tag: rf_power, shift_sigma: 6.0}
+        sensor_spike: {kind: spike, tag: chamber_pressure, shift_sigma: 8.0}
+        sensor_stuck: {kind: stuck, tag: precursor_flow}
+        rf_oscillation: {kind: oscillation, tag: rf_power, amplitude_sigma: 5.0, frequency: 0.8}
+        noise_increase: {kind: noise_increase, tag: substrate_temperature, noise_sigma: 4.0}
+        correlation_break: {kind: correlation_break, tags: [precursor_flow, carrier_gas_flow], break_sigma: 4.5}
+    vision:
+      defects: [particle, pinhole, thickness_non_uniformity]
+      root_cause_tags:
+        particle: [precursor_flow, chamber_pressure]
+        pinhole: [substrate_temperature, precursor_flow, deposition_time]
+        thickness_non_uniformity: [substrate_temperature, precursor_flow, rf_power]
+
+  cmp:
+    display_name: CMP
+    process_step: CMP
+    equipment_prefix: CMP
+    recipe_id: CMP_DEMO_A
+    timeseries:
+      tags:
+        down_force: {mean: 4.2, std: 0.08}
+        platen_speed: {mean: 82.0, std: 1.2}
+        carrier_speed: {mean: 76.0, std: 1.0}
+        slurry_flow: {mean: 180.0, std: 2.5}
+        motor_current: {mean: 8.5, std: 0.18}
+      temporal:
+        ar: 0.91
+        noise_scale: 0.52
+        correlations:
+          - {a: down_force, b: motor_current, rho: 0.75}
+          - {a: platen_speed, b: carrier_speed, rho: 0.70}
+          - {a: slurry_flow, b: motor_current, rho: 0.30}
+        phases:
+          - name: load
+            length: 10
+            offsets: {down_force: -1.2, platen_speed: -1.8, carrier_speed: -1.8, slurry_flow: -1.5, motor_current: -1.0}
+          - name: ramp
+            length: 12
+            offsets: {down_force: 0.0, platen_speed: -0.4, carrier_speed: -0.4, slurry_flow: 0.1, motor_current: 0.0}
+          - name: polish
+            length: 28
+            offsets: {down_force: 0.6, platen_speed: 0.5, carrier_speed: 0.4, slurry_flow: 0.6, motor_current: 0.7}
+          - name: rinse
+            length: 10
+            offsets: {down_force: -0.8, platen_speed: -0.8, carrier_speed: -0.8, slurry_flow: 0.3, motor_current: -0.7}
+      anomalies:
+        pressure_shift: {kind: change_point, tag: down_force, shift_sigma: 6.0}
+        platen_speed_drift: {kind: drift, tag: platen_speed, shift_sigma: 7.0, drift_per_step: 0.45}
+        slurry_flow_drop: {kind: drift, tag: slurry_flow, shift_sigma: -7.0, drift_per_step: -0.45}
+        motor_load_rise: {kind: drift, tag: motor_current, shift_sigma: 7.0, drift_per_step: 0.40}
+        sensor_spike: {kind: spike, tag: motor_current, shift_sigma: 8.0}
+        sensor_stuck: {kind: stuck, tag: slurry_flow}
+        platen_oscillation: {kind: oscillation, tag: platen_speed, amplitude_sigma: 5.0, frequency: 0.85}
+        noise_increase: {kind: noise_increase, tag: motor_current, noise_sigma: 4.0}
+        correlation_break: {kind: correlation_break, tags: [down_force, motor_current], break_sigma: 4.5}
+    vision:
+      defects: [scratch, residue, dishing, erosion]
+      root_cause_tags:
+        scratch: [down_force, slurry_flow, motor_current]
+        residue: [slurry_flow, platen_speed]
+        dishing: [down_force, platen_speed, carrier_speed]
+        erosion: [down_force, slurry_flow, platen_speed]

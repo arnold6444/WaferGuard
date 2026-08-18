@@ -1,0 +1,105 @@
+/* Theme overrides loaded after styles.css.
+   The original stylesheet declares `:root, [data-theme="light"]` after the
+   dark block, so :root could overwrite dark tokens on <html>. These explicit
+   html selectors are the final source of truth. */
+
+html[data-theme="light"] {
+  --bg: #EAEEF3; --bg-grid: rgba(15,30,50,0.022); --bg-elev: #FFFFFF;
+  --panel: #FFFFFF; --panel-2: #F3F6FA; --panel-3: #ECF1F7;
+  --border: #DBE2EC; --border-soft: #E7ECF3; --border-strong: #C4D0DE;
+  --text: #14202E; --text-2: #4C5A6B; --text-3: #77879A;
+  --accent: #1B8FAE; --accent-dim: rgba(27,143,174,0.12); --accent-line: rgba(27,143,174,0.40);
+  --amber: #B9791A; --amber-dim: rgba(185,121,26,0.13);
+  --low: #2E9A5C; --low-dim: rgba(46,154,92,0.13);
+  --med: #B9791A; --med-dim: rgba(185,121,26,0.13);
+  --high: #CC3A2C; --high-dim: rgba(204,58,44,0.12); --high-glow: rgba(204,58,44,0.30);
+  --shadow: 0 1px 2px rgba(20,40,70,0.06), 0 8px 24px -16px rgba(20,40,70,0.18);
+  --chart-a: #1B8FAE; --chart-b: #526B8A; --chart-purple: #7C5AC7;
+  --chart-amber: #B9791A; --chart-green: #2E9A5C; --chart-red: #C54F4F;
+  --chart-grid: #E1E7EF; --image-bg: #E8EDF3; --overlay: rgba(12,22,36,.52); --on-accent: #04161C;
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --bg: #090D14; --bg-grid: rgba(255,255,255,0.018); --bg-elev: #0D131D;
+  --panel: #111A26; --panel-2: #0E1722; --panel-3: #16222F;
+  --border: #1D2A3A; --border-soft: #16202D; --border-strong: #2A3B50;
+  --text: #E7EEF6; --text-2: #A7B4C6; --text-3: #74859B;
+  --accent: #4BC0DB; --accent-dim: rgba(75,192,219,0.14); --accent-line: rgba(75,192,219,0.38);
+  --amber: #F0B44A; --amber-dim: rgba(240,180,74,0.14);
+  --low: #52C887; --low-dim: rgba(82,200,135,0.14);
+  --med: #F0B44A; --med-dim: rgba(240,180,74,0.14);
+  --high: #F06455; --high-dim: rgba(240,100,85,0.16); --high-glow: rgba(240,100,85,0.40);
+  --shadow: 0 1px 0 rgba(255,255,255,0.025) inset, 0 10px 30px -14px rgba(0,0,0,0.72);
+  --chart-a: #56C7E1; --chart-b: #B4C7DD; --chart-purple: #B69AF1;
+  --chart-amber: #F0B44A; --chart-green: #65D39A; --chart-red: #F17B72;
+  --chart-grid: #223044; --image-bg: #050A10; --overlay: rgba(0,0,0,.68); --on-accent: #04161C;
+  color-scheme: dark;
+}
+
+html, body, #root, .app-root { min-height: 100%; }
+body, .app-root { background-color: var(--bg); color: var(--text); }
+
+.app-root, .app-header, .app-sidebar, .app-main, .panel, .panel-inset, .btn, .chip, .kbd,
+input, select, textarea, table, th, td {
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.app-root { min-height: 100vh; }
+.app-header {
+  display: flex; align-items: center; gap: 16px; padding: 0 18px; height: 54px;
+  background: var(--bg-elev); color: var(--text); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-status-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.app-body { display: flex; align-items: stretch; }
+.app-sidebar {
+  width: 212px; flex: none; background: var(--bg-elev); color: var(--text);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  padding: 12px 10px; gap: 3px; position: sticky; top: 54px;
+  height: calc(100vh - 54px); overflow-y: auto;
+}
+.sidebar-nav-button {
+  display: flex; align-items: center; gap: 11px; cursor: pointer; position: relative;
+  padding: 8px 10px; border-radius: 8px; border: 1px solid transparent;
+  font: inherit; text-align: left; width: 100%; background: transparent; color: var(--text-2);
+}
+.sidebar-nav-button[data-active="true"] { background: var(--accent-dim); color: var(--accent); }
+.sidebar-nav-button:hover { background: var(--panel-2); color: var(--text); }
+.sidebar-nav-button[data-active="true"]:hover { background: var(--accent-dim); color: var(--accent); }
+.sidebar-active-rail { position: absolute; left: 0; top: 8px; width: 3px; height: calc(100% - 16px); background: var(--accent); border-radius: 99px; }
+.app-main { flex: 1; min-width: 0; padding: 15px; max-width: 1480px; margin: 0 auto; width: 100%; color: var(--text); }
+.context-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-top: 2px; }
+.context-bar h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.02em; color: var(--text); }
+.context-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+
+.language-switch { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.language-switch button { border: 0; border-radius: 6px; padding: 5px 8px; cursor: pointer; color: var(--text-3); background: transparent; font: 600 10.5px/1.2 inherit; }
+.language-switch button[data-active="true"] { color: var(--accent); background: var(--panel); box-shadow: var(--shadow); }
+.theme-toggle { padding: 6px 9px; }
+
+.btn-accent { color: var(--on-accent) !important; }
+input, select, textarea { background: var(--panel-2); border-color: var(--border-strong); color: var(--text); }
+input::placeholder, textarea::placeholder { color: var(--text-3); }
+option { background: var(--panel); color: var(--text); }
+
+.recharts-cartesian-grid line { stroke: var(--chart-grid); }
+.recharts-text { fill: var(--text-3); }
+.recharts-default-tooltip { background: var(--panel) !important; border-color: var(--border) !important; color: var(--text) !important; }
+.recharts-wrapper [stroke="#172b4d"] { stroke: var(--chart-b) !important; }
+.recharts-wrapper [stroke="#3f7fbf"] { stroke: var(--chart-a) !important; }
+.recharts-wrapper [stroke="#7c5ac7"] { stroke: var(--chart-purple) !important; }
+.recharts-wrapper [stroke="#d58b24"] { stroke: var(--chart-amber) !important; }
+.recharts-wrapper [stroke="#2e9a5c"] { stroke: var(--chart-green) !important; }
+.recharts-wrapper [stroke="#c54f4f"] { stroke: var(--chart-red) !important; }
+.recharts-wrapper [fill="#172b4d"] { fill: var(--chart-b) !important; }
+.recharts-wrapper [fill="#3f7fbf"] { fill: var(--chart-a) !important; }
+
+html[data-theme="dark"] img:not([src*="wafer"]):not([src*="process_runtime"]) { opacity: .96; }
+
+@media (max-width: 980px) {
+  .header-status-group { display: none; }
+  .app-sidebar { width: 176px; }
+  .language-switch button { padding-inline: 6px; }
+}

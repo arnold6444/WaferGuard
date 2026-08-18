@@ -7,10 +7,17 @@ runtime/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+notebooks/.ipynb_checkpoints/
 frontend/vite.*.log
 backend.*.log
 .playwright-cli/
 output/
+data/input/*
+!data/input/
+!data/input/.gitkeep
+data/output/*
+!data/output/
+!data/output/.gitkeep
 .env
 .env.local
 .DS_Store

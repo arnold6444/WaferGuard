@@ -333,3 +333,140 @@ git diff --check
 - [x] Process/Wafer/Agent E2E
 - [x] UI/docs consolidation
 - [x] Final verification
+
+---
+
+# FAB Multimodal Platform v2 Delta (2026-08-18)
+
+기존 완료 범위는 유지한다. 이 Delta는 Photo/Etch/Deposition/CMP 네 공정을 동일 FAB identity로 연결하고, 성능 튜닝보다 교체 가능한 전체 실행 프레임을 만드는 변경이다.
+
+## Requirement Delta
+
+### Preserve
+
+- 기존 Chamber runtime, Process TS/Vision 후보, MLOps 수동 승격, Inspection Agent/HITL/RAG
+- PostgreSQL 기본 개발 경로와 명시적 SQLite 테스트 경로
+- 기존 `/api/v1/lots`, process/inspection API와 legacy/demo process profile
+- 기존 DB table과 호환 컬럼; destructive migration 금지
+
+### Add
+
+- `fab.v2` Lot/Wafer/Process Run/Equipment/Unit/Recipe/Cycle/State/Phase identity
+- 결정적 4공정 Virtual FAB, equipment/unit bias, degradation/maintenance, 4개 latent fault
+- run 이후 Metrology +5분, Inspection +10분의 simulated availability
+- signed detector result, missing-modality late fusion, evidence-only Candidate RCA
+- simulation truth와 inference 저장소의 물리적 분리 및 RCA 후 Top-1/Top-3 평가
+- QoS 1 MQTT와 consumer receipt, Direct 디버그 transport, FAB trace/read API, dashboard 연결
+
+### Out of Scope
+
+- 실제 장비 제어, 8공정 전체 runtime, 새 Vision DL 모델
+- synthetic 데이터에 맞춘 threshold/모델 성능 튜닝
+- 대량 생성·재학습·benchmark, 자동 Production 승격
+- backend/frontend Docker image, 외부 publication
+
+## Architecture Delta
+
+```text
+fab_simulator.yaml + fault_catalog.yaml
+  → VirtualFabGenerator
+  → fab.v2 envelope
+  → Direct (debug) 또는 Mosquitto QoS 1 (default)
+  → 동일 FabMessageRouter
+      ├─ DB writer → FAB additive tables
+      └─ Detector → fab_detector_results (GT column 없음)
+  → signed-margin late fusion
+  → persisted evidence-only RCA
+  → RCA 완료 후에만 simulation_faults 평가
+  → Trace/API/Dashboard + 기존 Agent/HITL/MLOps
+```
+
+- image는 object storage에 저장하고 transport에는 key와 observed feature만 보낸다.
+- public transport/API는 fault ID, injected label, GT mask를 제거한다.
+- `FAB_SYNTHETIC_DEBUG=1`일 때만 별도 debug repository의 mask/fault를 read model에 포함한다.
+- 기존 artifact는 보존하되 `feature_contract`, feature/config fingerprint가 모두 일치할 때만 FAB v2 추론에 사용한다. 호환 후보가 없으면 versioned context baseline을 사용하며 자동 promote하지 않는다.
+
+## Implementation Delta
+
+- [x] Config/schema/fingerprint와 additive SQLite/PostgreSQL storage
+- [x] 4공정 generator, lifecycle, fault propagation, metrology/inspection
+- [x] standard detector output, fusion, evidence-ranked RCA, evaluation-only GT reader
+- [x] MQTT/direct transport, idempotent receipt, unified orchestrator/CLI
+- [x] FAB equipment/live/trace/run/RCA/metrics API
+- [x] Fab Overview, Process Monitoring, Wafer Quality, AI Analysis 연결과 legacy fallback
+- [x] PostgreSQL + Mosquitto Compose, 실행/튜닝 문서
+
+## Verification Delta
+
+이번 checkpoint는 사용자 결정에 따라 framework-first로 검증한다. 모델 재학습, 대량 Lot/image 생성, 성능 최적화는 실행하지 않는다.
+
+```powershell
+$env:STORAGE_BACKEND='sqlite'
+python -m pytest -q tests/test_fab_v2_generator.py tests/test_fab_v2_fusion.py `
+  tests/test_fab_storage.py tests/test_fab_api.py tests/test_fab_mqtt.py `
+  tests/test_fab_detection.py tests/test_fab_runtime.py tests/test_fab_orchestrator.py
+
+python scripts/run_fab_stream.py --lots 1 --wafers-per-lot 1 --process cmp --transport direct --seed 17
+docker compose config --quiet
+Push-Location frontend; npm.cmd run build; Pop-Location
+git diff --check
+```
+
+현재 계약 검증: FAB focused `30 passed`. 생성 품질과 모델 성능 평가는 이후 별도 작업으로 남긴다.
+
+---
+
+# Local Analysis Notebook & Delivery Delta (2026-08-18)
+
+## Goal
+
+개인 학습에서는 로컬 Jupyter notebook으로 데이터를 셀 단위 분석하고, 설치형 프로그램과 자동 파이프라인에서는 동일 로직을 Python 모듈/CLI로 실행한다. 분석 결과는 로컬 JSON 계약을 통해 기존 대시보드에 표시한다.
+
+## Scope
+
+### In Scope
+
+- `data/input`의 CSV/Parquet 입력과 `data/output`의 분석·모델 결과
+- 데이터 구조, 결측/중복, 기술 통계, correlation heatmap, feature importance, 기본 평가
+- notebook과 CLI가 공유하는 `fab_analysis.py`
+- 현재 FAB feature/config fingerprint를 포함하는 선택적 Staging 후보 artifact
+- 최신 분석 JSON 조회 API와 AI Analysis 요약 패널
+- 실행 문서 1개와 구조 문서 1개로 FAB v2 안내 통합
+- 확인된 cache/build/log 산출물과 중복 코드 정리
+- commit, push, PR #11 CI 확인 및 main 병합
+
+### Out of Scope
+
+- Google Drive/S3를 notebook 데이터 교환 경로로 사용
+- notebook 실행 시 자동 대량 생성, 자동 Production 승격
+- 임의 외부 CSV 컬럼을 production feature contract로 묵시적 변환
+- CI skip, assertion 약화, workflow 비활성화로 상태를 꾸미는 처리
+
+## Decisions
+
+- notebook은 orchestration만 담당하고 분석/학습 구현은 import 가능한 `.py` 모듈에 둔다.
+- 원본과 결과는 각각 `data/input`, `data/output`에 두며 내용은 Git에서 제외한다.
+- feature importance는 label이 있으면 supervised forest, 없으면 Isolation Forest 결과를 설명하는 surrogate forest로 명시한다.
+- Production 호환 후보는 exact runtime feature names일 때만 저장하고 등록은 Staging까지만 허용한다.
+- dashboard는 `data/output/dashboard_summary.json`을 `/api/v1/fab/analysis/latest`로 노출한다.
+- 기존 runtime DB/image/model은 사용자 로컬 상태이므로 삭제하지 않고 cache, build, stale log만 제거한다.
+
+## Implementation Steps
+
+1. 로컬 data 경로와 선택형 notebook dependency를 추가한다.
+2. EDA, feature importance, 후보 artifact, dashboard JSON용 공통 Python 모듈과 CLI를 구현한다.
+3. 셀 단위 notebook을 공통 모듈 위에 구성한다.
+4. FastAPI read endpoint와 AI Analysis 패널을 연결한다.
+5. `RUN_LOCAL.md`, `ARCHITECTURE.md`로 v2 실행/구조 문서를 통합하고 중복 문서를 제거한다.
+6. cache/build/log와 확인된 중복 코드를 정리한다.
+7. targeted test, notebook smoke, API, frontend build, full CI-equivalent 검증 후 publish/merge한다.
+
+## Definition of Done
+
+- 로컬 파일을 넣고 notebook 셀 또는 CLI로 같은 분석 결과를 만들 수 있다.
+- 데이터 구조, 결측/중복, 통계, heatmap, feature importance, metric이 notebook에 있다.
+- raw data와 결과는 로컬에만 남고 Git에 포함되지 않는다.
+- 분석 JSON이 API와 AI Analysis 화면에 표시된다.
+- 실행/구조 문서가 실제 명령과 data/artifact 위치를 설명한다.
+- 불필요한 산출물은 제거되며 기존 runtime state와 공개 계약은 보존된다.
+- 로컬 검증과 GitHub CI가 통과하고 PR #11이 main에 병합된다.
