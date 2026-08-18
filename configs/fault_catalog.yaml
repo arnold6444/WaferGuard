@@ -1,0 +1,51 @@
+schema_version: waferguard.fault-catalog.v1
+
+# All coefficients below are synthetic proxy values for development and tests.
+# Sensor coefficients are expressed as a fraction of the tag sigma at full
+# run progress. Quality coefficients use the metric's display unit.
+faults:
+  photo_focus_drift:
+    process_id: photo
+    detector_anomaly: focus_shift
+    sensor_effects:
+      focus_offset: {kind: linear, coefficient: 5.0}
+      overlay_nm: {kind: linear, coefficient: 2.8}
+    quality_effects:
+      critical_dimension_nm: 1.8
+      overlay_nm: 1.4
+    vision: {defect: misalignment, base_probability: 0.18, max_probability: 0.88}
+
+  etch_chamber_contamination:
+    process_id: etch
+    detector_anomaly: pressure_drift
+    sensor_effects:
+      chamber_pressure: {kind: linear, coefficient: 4.5}
+      total_gas_flow: {kind: linear, coefficient: -2.2}
+      chamber_temperature: {kind: linear, coefficient: 1.8}
+      resistance: {kind: linear, coefficient: 2.5}
+    quality_effects:
+      etch_depth_nm: -7.0
+      sidewall_angle_deg: -1.8
+    vision: {defect: residue, base_probability: 0.20, max_probability: 0.90}
+
+  deposition_precursor_instability:
+    process_id: deposition
+    detector_anomaly: correlation_break
+    sensor_effects:
+      precursor_flow: {kind: oscillation, coefficient: 5.5, frequency: 3.0}
+      chamber_pressure: {kind: oscillation, coefficient: 2.0, frequency: 2.0}
+    quality_effects:
+      film_thickness_nm: 5.5
+      uniformity_percent: -3.0
+    vision: {defect: thickness_non_uniformity, base_probability: 0.20, max_probability: 0.90}
+
+  cmp_slurry_degradation:
+    process_id: cmp
+    detector_anomaly: slurry_flow_drop
+    sensor_effects:
+      slurry_flow: {kind: linear, coefficient: -5.0}
+      motor_current: {kind: linear, coefficient: 3.2}
+    quality_effects:
+      remaining_film_nm: 3.8
+      within_wafer_nonuniformity_percent: 2.2
+    vision: {defect: scratch, base_probability: 0.22, max_probability: 0.92}

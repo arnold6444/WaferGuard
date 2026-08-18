@@ -1,0 +1,6 @@
+-r requirements.txt
+jupyterlab>=4.2,<5
+ipykernel>=6.29,<7
+matplotlib>=3.8,<4
+seaborn>=0.13,<1
+pyarrow>=16,<24

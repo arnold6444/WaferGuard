@@ -10,6 +10,7 @@ import {
 } from "recharts";
 
 import { Icon, Panel } from "../lib";
+import { buildQuery } from "../fabApi";
 import { useUi } from "../UiContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -210,10 +211,10 @@ function VisionViewer({ history }) {
       <div>
         <div className="chamber-process-grid">
           <div><span>{text("웨이퍼", "Wafer")}</span><strong className="mono">{latest.wafer_id}</strong><em>{latest.observed_at?.slice(11, 19)}</em></div>
-          <div><span>{text("탐지", "Detection")}</span><strong>{vision.flag ? text("이상", "ANOMALY") : text("정상", "NORMAL")}</strong><em>{vision.ground_truth ? text("GT 주입", "GT injected") : text("정상 GT", "normal GT")}</em></div>
+          <div><span>{text("탐지", "Detection")}</span><strong>{vision.flag ? text("이상", "ANOMALY") : text("정상", "NORMAL")}</strong><em>{text("모델 판정", "model decision")}</em></div>
           <div><span>{text("점수", "Score")}</span><strong className="mono">{formatScore(vision.score)}</strong><em>{text("임계값", "threshold")} {formatScore(vision.threshold)}</em></div>
           <div><span>{text("마진", "Margin")}</span><strong className="mono" style={{ color: margin >= 0 ? "var(--high)" : "var(--low)" }}>{formatScore(margin)}</strong><em>{text("0 이상이면 이상", "anomaly when ≥ 0")}</em></div>
-          <div><span>{text("결함", "Defect")}</span><strong>{vision.injected_anomaly || "—"}</strong><em>{text("synthetic 라벨", "synthetic label")}</em></div>
+          <div><span>Process Run</span><strong className="mono">{latest.process_run_id || "—"}</strong><em>{text("FAB identity", "FAB identity")}</em></div>
           <div><span>{text("모델", "Model")}</span><strong className="mono">{vision.model || "—"}</strong><em>{text("Production artifact", "Production artifact")}</em></div>
           <div><span>{text("RCA 태그", "RCA Tags")}</span><strong>{vision.related_tags?.length || 0}</strong><em>{vision.related_tags?.join(", ") || "—"}</em></div>
         </div>
@@ -229,7 +230,7 @@ function VisionViewer({ history }) {
   );
 }
 
-export default function GenericProcessMonitoring({ profile, section = "overview" }) {
+export default function GenericProcessMonitoring({ profile, section = "overview", filters }) {
   const { text } = useUi();
   const processId = profile.process_id;
   const processStep = STEP_BY_PROCESS[processId] || profile.display_name;
@@ -239,8 +240,14 @@ export default function GenericProcessMonitoring({ profile, section = "overview"
 
   const load = useCallback(async () => {
     try {
+      const eventQuery = buildQuery({
+        process_step: processStep,
+        equipment_id: filters?.equipment,
+        recipe_id: filters?.recipe,
+        limit: 160,
+      });
       const [eventResponse, liveResponse] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/process/events?process_step=${encodeURIComponent(processStep)}&limit=160`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/v1/process/events${eventQuery}`, { cache: "no-store" }),
         fetch(`${API_BASE}/outputs/process_runtime/${processId}/live.json?t=${Date.now()}`, { cache: "no-store" }),
       ]);
       if (!eventResponse.ok) throw new Error(text(`${profile.display_name} process event API를 확인해 주세요.`, `Check the ${profile.display_name} process event API.`));
@@ -251,7 +258,7 @@ export default function GenericProcessMonitoring({ profile, section = "overview"
     } catch (nextError) {
       setError(nextError.message || text(`${profile.display_name} runtime 데이터를 불러오지 못했습니다.`, `Could not load ${profile.display_name} runtime data.`));
     }
-  }, [processId, processStep, profile.display_name, text]);
+  }, [filters?.equipment, filters?.recipe, processId, processStep, profile.display_name, text]);
 
   useEffect(() => {
     load();
@@ -259,7 +266,12 @@ export default function GenericProcessMonitoring({ profile, section = "overview"
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const history = live.history || [];
+  const history = (live.history || []).filter(item => {
+    if (filters?.equipment && filters.equipment !== "all" && item.equipment_id !== filters.equipment) return false;
+    if (filters?.unit && filters.unit !== "all" && item.unit_id !== filters.unit) return false;
+    if (filters?.recipe && filters.recipe !== "all" && item.recipe_id !== filters.recipe) return false;
+    return true;
+  });
   const latest = history.at(-1);
   const latestTs = [...history].reverse().find(item => item.timeseries)?.timeseries;
   const latestVision = [...history].reverse().find(item => item.vision)?.vision;
@@ -321,8 +333,8 @@ export default function GenericProcessMonitoring({ profile, section = "overview"
             <MetricCard label={text("설비", "Equipment")} value={latest?.equipment_id || "—"} detail={latest?.lot_id || text("대기", "waiting")} />
             <MetricCard label={text("최신 웨이퍼", "Latest Wafer")} value={latest?.wafer_id || "—"} detail={latest?.observed_at || text("대기", "waiting")} tone="low" />
             <MetricCard label={text("공정 Phase", "Process Phase")} value={latestTs?.phase || "—"} detail={latestTs?.phase_progress == null ? "—" : `${Math.round(Number(latestTs.phase_progress) * 100)}%`} />
-            <MetricCard label={text("TS 상태", "TS State")} value={latestTs?.flag ? text("이상", "ANOMALY") : latestTs ? text("정상", "NORMAL") : "—"} detail={latestTs?.injected_anomaly || text("주입 이상 없음", "no injected anomaly")} tone={latestTs?.flag ? "high" : "low"} />
-            <MetricCard label={text("Vision 상태", "Vision State")} value={latestVision?.flag ? text("이상", "ANOMALY") : latestVision ? text("정상", "NORMAL") : "—"} detail={latestVision?.injected_anomaly || text("주입 결함 없음", "no injected defect")} tone={latestVision?.flag ? "high" : "low"} />
+            <MetricCard label={text("TS 상태", "TS State")} value={latestTs?.flag ? text("이상", "ANOMALY") : latestTs ? text("정상", "NORMAL") : "—"} detail={`${text("판정 마진", "decision margin")} ${formatScore(tsMargin)}`} tone={latestTs?.flag ? "high" : "low"} />
+            <MetricCard label={text("Vision 상태", "Vision State")} value={latestVision?.flag ? text("이상", "ANOMALY") : latestVision ? text("정상", "NORMAL") : "—"} detail={`${text("판정 마진", "decision margin")} ${formatScore(visionMargin)}`} tone={latestVision?.flag ? "high" : "low"} />
           </div>
           <Panel title={text("현재 telemetry 값", "Current telemetry values")} icon="cpu" right={<span className="chip">RAW SYNTHETIC</span>}>
             <div className="process-profile-grid">

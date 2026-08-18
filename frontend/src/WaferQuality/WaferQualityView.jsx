@@ -11,6 +11,7 @@ import {
 } from "recharts";
 
 import InspectionView from "../InspectionView";
+import { fetchJson, normalizeProcessRunRows, rowsFrom } from "../fabApi";
 import { Icon, Panel, SubTabs } from "../lib";
 import { useUi } from "../UiContext";
 import WaferVisionView from "../WaferVisionView";
@@ -92,6 +93,108 @@ function AccumulatedMap({ wafers }) {
   );
 }
 
+function runStatus(run) {
+  if (run.is_anomaly || run.status === "critical" || rowsFrom(run, ["detections"]).some(item => item.is_anomaly)) return "critical";
+  if (run.status === "warning") return "warning";
+  if (["completed", "running", "normal"].includes(String(run.status || run.machine_state).toLowerCase())) return "normal";
+  return "offline";
+}
+
+function resultRows(detail) {
+  const direct = rowsFrom(detail, ["modality_results", "results", "detections", "inference_results"]);
+  const metrology = rowsFrom(detail, ["metrology", "metrology_results"]);
+  const vision = rowsFrom(detail, ["inspections", "inspection_assets"]);
+  const singular = [detail?.timeseries_result, detail?.vision_result, detail?.metrology_result].filter(Boolean);
+  return [...direct, ...metrology, ...vision, ...singular].slice(-12);
+}
+
+function WaferRouteTrace({ waferId, onOpenRca }) {
+  const { text } = useUi();
+  const [trace, setTrace] = useState(null);
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [runDetail, setRunDetail] = useState(null);
+
+  useEffect(() => {
+    if (!waferId) return undefined;
+    let cancelled = false;
+    const controller = new AbortController();
+    fetchJson(`/api/v1/fab/wafers/${encodeURIComponent(waferId)}/trace`, { signal: controller.signal })
+      .then(body => {
+        if (cancelled) return;
+        const rows = normalizeProcessRunRows(body);
+        setTrace({ body, rows });
+        setSelectedRunId(current => rows.some(item => item.process_run_id === current) ? current : rows[0]?.process_run_id || "");
+      })
+      .catch(error => {
+        if (!cancelled && error.name !== "AbortError") setTrace(null);
+      });
+    return () => { cancelled = true; controller.abort(); };
+  }, [waferId]);
+
+  useEffect(() => {
+    if (!selectedRunId) {
+      setRunDetail(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    fetchJson(`/api/v1/fab/process-runs/${encodeURIComponent(selectedRunId)}`, { signal: controller.signal })
+      .then(body => { if (!cancelled) setRunDetail(body); })
+      .catch(error => {
+        if (!cancelled && error.name !== "AbortError") setRunDetail(null);
+      });
+    return () => { cancelled = true; controller.abort(); };
+  }, [selectedRunId]);
+
+  if (!trace?.rows?.length) return null;
+  const selectedRun = trace.rows.find(item => item.process_run_id === selectedRunId) || trace.rows[0];
+  const detail = runDetail || selectedRun;
+  const results = resultRows(detail);
+  const telemetryRows = rowsFrom(detail, ["telemetry", "samples"]);
+  const latestTelemetry = detail.latest_telemetry || telemetryRows.at(-1) || {};
+  const rawTags = latestTelemetry.payload || latestTelemetry.tags || latestTelemetry.values || {};
+
+  return (
+    <div className="wafer-route-section">
+      <Panel title={text(`${waferId} 전체 공정 Route`, `${waferId} Full Process Route`)} icon="history" right={<span className="chip">{trace.rows.length} RUNS</span>}>
+        <div className="wafer-route-track">
+          {trace.rows.map((run, index) => (
+            <React.Fragment key={run.process_run_id}>
+              {index > 0 && <span className="wafer-route-arrow">→</span>}
+              <button type="button" className={`focusable wafer-route-run ${selectedRunId === run.process_run_id ? "is-selected" : ""}`} onClick={() => setSelectedRunId(run.process_run_id)}>
+                <span className={`status-dot status-${runStatus(run)}`} />
+                <strong>{run.process_step || run.process_id || "Process"}</strong>
+                <small className="mono">{run.equipment_id || "—"} · {run.unit_id || "—"}</small>
+                <time className="mono">{run.started_at?.slice(11, 19) || "—"}</time>
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title={text("Process Run 상세", "Process Run Drill-down")} icon="zoom" right={<button type="button" className="btn btn-accent btn-sm" onClick={() => onOpenRca?.(selectedRun.process_run_id)}>{text("Candidate RCA", "Candidate RCA")}</button>}>
+        <div className="process-run-identity">
+          <div><span>Process Run</span><strong className="mono">{selectedRun.process_run_id}</strong></div>
+          <div><span>{text("설비 / Unit", "Equipment / Unit")}</span><strong className="mono">{detail.equipment_id || selectedRun.equipment_id || "—"} / {detail.unit_id || selectedRun.unit_id || "—"}</strong></div>
+          <div><span>Recipe</span><strong className="mono">{detail.recipe_id || selectedRun.recipe_id || "—"}</strong></div>
+          <div><span>Cycle / Phase</span><strong className="mono">{detail.cycle ?? selectedRun.cycle ?? "—"} / {detail.phase || latestTelemetry.phase || "—"}</strong></div>
+          <div><span>{text("시간", "Time")}</span><strong className="mono">{selectedRun.started_at?.slice(0, 19) || "—"} → {selectedRun.ended_at?.slice(11, 19) || "—"}</strong></div>
+        </div>
+        {(results.length > 0 || Object.keys(rawTags).length > 0) && (
+          <div className="process-run-evidence">
+            <div className="fab-result-list">
+              {results.map((result, index) => <div key={`${result.modality || "result"}-${index}`}><span className={`status-dot status-${result.is_anomaly ? "warning" : "normal"}`} /><strong>{result.modality || "result"}</strong><span className="mono">raw {result.raw_score == null ? "—" : Number(result.raw_score).toFixed(3)}</span><span className="mono">margin {result.margin == null ? "—" : Number(result.margin).toFixed(3)}</span><small className="mono">{result.model_version || "—"}</small></div>)}
+            </div>
+            <div className="fab-raw-tag-grid">
+              {Object.entries(rawTags).filter(([, value]) => typeof value !== "object").slice(0, 8).map(([tag, value]) => <div key={tag}><span>{tag}</span><strong className="mono">{Number.isFinite(Number(value)) ? Number(value).toFixed(3) : String(value)}</strong></div>)}
+            </div>
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
 export default function WaferQualityView({ target, onNavigate }) {
   const { language, text } = useUi();
   const [tab, setTab] = useState(target?.tab || "overview");
@@ -138,6 +241,7 @@ export default function WaferQualityView({ target, onNavigate }) {
         const first = [...expanded.wafers].filter(item => item.status !== "not_inspected").sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0];
         setSelectedId(target?.waferId || first?.wafer_id || "W01");
       })
+      .catch(() => { /* preserve the last runtime or demo detail */ })
       .finally(() => setLoading(false));
   }, [lotId, target?.waferId]);
   useEffect(() => {
@@ -224,6 +328,7 @@ export default function WaferQualityView({ target, onNavigate }) {
             <div><span className="label-cap">{text("선택 웨이퍼", "Selected Wafer")}</span><strong className="mono">{selected.wafer_id}</strong><span className={`status-label status-${selected.status}`}><StatusLabel status={selected.status} /></span></div>
             <div className="quality-evidence-tabs"><button type="button" className={evidenceTab === "inspection" ? "is-active" : ""} onClick={() => setEvidenceTab("inspection")}>{text("검사 / Metrology", "Inspection / Metrology")}</button><button type="button" className={evidenceTab === "vision" ? "is-active" : ""} onClick={() => setEvidenceTab("vision")}>{text("Vision 근거", "Vision Evidence")}</button></div>
           </div>
+          <WaferRouteTrace waferId={selected.wafer_id} onOpenRca={processRunId => onNavigate?.({ id: "ai", processRunId })} />
           {evidenceTab === "inspection" ? (
             selected.inspection ? <InspectionView inspection={selected.inspection} embedded onOpenAgent={inspectionId => onNavigate?.({ id: "ai", focusId: inspectionId })} /> : <div className="panel process-empty">{text("선택 웨이퍼는 아직 검사되지 않았습니다.", "The selected wafer has not been inspected yet.")}</div>
           ) : (

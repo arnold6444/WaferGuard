@@ -14,6 +14,7 @@ import {
 } from "recharts";
 
 import ChamberView from "../ChamberView";
+import { buildQuery } from "../fabApi";
 import { Icon, Panel } from "../lib";
 import { useUi } from "../UiContext";
 
@@ -54,7 +55,7 @@ function EquipmentSelector({ equipment, selected, onSelect }) {
   );
 }
 
-export default function EtchMonitoring({ section = "overview" }) {
+export default function EtchMonitoring({ section = "overview", filters, onEquipmentSelect }) {
   const { text } = useUi();
   const [data, setData] = useState({ status: null, equipment: [], predictions: [], detections: [], models: [], events: [] });
   const [selected, setSelected] = useState("");
@@ -65,13 +66,14 @@ export default function EtchMonitoring({ section = "overview" }) {
   const load = useCallback(async () => {
     try {
       const query = selected ? `?equipment_id=${encodeURIComponent(selected)}&limit=180` : "?limit=180";
+      const eventQuery = buildQuery({ process_step: "Etch", equipment_id: filters?.equipment, recipe_id: filters?.recipe, limit: 40 });
       const responses = await Promise.all([
         fetch(`${API_BASE}/api/v1/chamber/status`),
         fetch(`${API_BASE}/api/v1/chamber/equipment`),
         fetch(`${API_BASE}/api/v1/chamber/predictions${query}`),
         fetch(`${API_BASE}/api/v1/chamber/detections?limit=360`),
         fetch(`${API_BASE}/api/v1/chamber/models`),
-        fetch(`${API_BASE}/api/v1/process/events?process_step=Etch&limit=40`),
+        fetch(`${API_BASE}/api/v1/process/events${eventQuery}`),
       ]);
       if (!responses.every(response => response.ok)) throw new Error(text("Etch API 응답을 확인해 주세요.", "Check the Etch API responses."));
       const [status, equipment, predictions, detections, models, events] = await Promise.all(responses.map(response => response.json()));
@@ -81,7 +83,11 @@ export default function EtchMonitoring({ section = "overview" }) {
     } catch (nextError) {
       setError(nextError.message || text("Etch 데이터를 불러오지 못했습니다.", "Could not load Etch data."));
     }
-  }, [selected, text]);
+  }, [filters?.equipment, filters?.recipe, selected, text]);
+
+  useEffect(() => {
+    if (filters?.equipment && filters.equipment !== "all") setSelected(filters.equipment);
+  }, [filters?.equipment]);
 
   useEffect(() => {
     load();
@@ -117,6 +123,11 @@ export default function EtchMonitoring({ section = "overview" }) {
     const body = await response.json();
     setMessage(response.ok ? text(`${body.version}이 Production으로 승격됐습니다.`, `${body.version} was promoted to Production.`) : text(`승격 실패: ${body.detail || "artifact 확인 필요"}`, `Promotion failed: ${body.detail || "check artifact"}`));
     await load();
+  }
+
+  function selectEquipment(equipmentId) {
+    setSelected(equipmentId);
+    onEquipmentSelect?.(equipmentId);
   }
 
   if (error && !data.equipment.length) return <><SourceNotice /><EmptyState error={error} /></>;
@@ -155,7 +166,7 @@ export default function EtchMonitoring({ section = "overview" }) {
 
       {section === "equipment" && (
         <>
-          <EquipmentSelector equipment={data.equipment} selected={selected} onSelect={setSelected} />
+          <EquipmentSelector equipment={data.equipment} selected={selected} onSelect={selectEquipment} />
           <div className="process-equipment-detail">
             <Panel title={`${selected || "ETCH"} · ${text("설비 상태", "Equipment Condition")}`} icon="cpu" right={<span className={`chamber-status ${current?.is_anomaly ? "chamber-status-high" : "chamber-status-low"}`}><span />{current?.is_anomaly ? text("경고", "WARNING") : text("정상", "NORMAL")}</span>}>
               <div className="chamber-process-grid">
@@ -173,7 +184,7 @@ export default function EtchMonitoring({ section = "overview" }) {
 
       {section === "trend" && (
         <>
-          <EquipmentSelector equipment={data.equipment} selected={selected} onSelect={setSelected} />
+          <EquipmentSelector equipment={data.equipment} selected={selected} onSelect={selectEquipment} />
           <Panel title={`${selected || "ETCH"} · ${text("실측 vs 예상 저항", "Actual vs Expected Resistance")}`} icon="pulse" right={<span className="chip">2s POLLING</span>}>
             <div className="chamber-chart chamber-chart-lg"><ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 220 }}><ComposedChart data={chart} margin={{ top: 10, right: 12, bottom: 0, left: -5 }}><CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 5" vertical={false} /><XAxis dataKey="time" tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} minTickGap={28} /><YAxis tick={{ fontSize: 9, fill: "var(--text-3)" }} axisLine={false} tickLine={false} unit="Ω" /><Tooltip contentStyle={tooltipStyle} /><Legend wrapperStyle={{ fontSize: 10 }} /><Line type="monotone" dataKey="expected_resistance" name={text("예상", "Expected")} stroke="var(--chart-a)" strokeWidth={2.4} dot={false} /><Line type="monotone" dataKey="actual_resistance" name={text("실측", "Actual")} stroke="var(--chart-b)" strokeWidth={1.8} dot={false} /><Scatter data={anomalies} dataKey="actual_resistance" name={text("이상", "Anomaly")} fill="var(--high)" /></ComposedChart></ResponsiveContainer></div>
           </Panel>
@@ -185,7 +196,7 @@ export default function EtchMonitoring({ section = "overview" }) {
 
       {section === "anomaly" && (
         <>
-          <EquipmentSelector equipment={data.equipment} selected={selected} onSelect={setSelected} />
+          <EquipmentSelector equipment={data.equipment} selected={selected} onSelect={selectEquipment} />
           <div className="fab-metrics">
             <MetricCard label={text("이상 지점", "Anomaly Points")} value={anomalies.length} unit={text("개", "points")} detail={selected || text("전체 설비", "all equipment")} tone="high" />
             <MetricCard label={text("최신 Residual", "Latest Residual")} value={latest?.residual == null ? "—" : Number(latest.residual).toFixed(3)} unit="Ω" detail={`${text("임계값", "threshold")} ${latest?.threshold == null ? "—" : Number(latest.threshold).toFixed(3)}`} tone="med" />

@@ -55,8 +55,13 @@ from app.services.storage import (
     record_review,
     resolve_approval,
 )
-from app.services import chamber_storage, db
+from app.services import chamber_storage, db, fab_analysis, fab_storage
 from app.services.chamber_runtime import chamber_runtime
+
+
+FAB_SYNTHETIC_DEBUG = os.environ.get("FAB_SYNTHETIC_DEBUG", "0").strip().lower() in {
+    "1", "true", "yes", "on",
+}
 
 ensure_runtime_dirs()
 try:
@@ -116,6 +121,7 @@ def health() -> dict[str, object]:
         "status": "ok",
         "service": "waferguard-api",
         "database": DATABASE_STARTUP_STATUS,
+        "fab": fab_storage.fab_metrics(),
     }
 
 
@@ -290,7 +296,75 @@ def database_table(table_name: str, limit: int = 50, offset: int = 0) -> dict[st
 
 @app.get("/api/v1/fab/overview")
 def fab_status_overview() -> dict[str, object]:
-    return fab_overview()
+    return fab_storage.enrich_overview(fab_overview())
+
+
+@app.get("/api/v1/fab/equipment")
+def fab_equipment(process_id: str | None = None) -> list[dict[str, object]]:
+    return fab_storage.equipment_overview(process_id)
+
+
+@app.get("/api/v1/fab/wafers/{wafer_id}/trace")
+def fab_wafer_trace(wafer_id: str, telemetry_limit_per_run: int = 500) -> dict[str, object]:
+    result = fab_storage.wafer_trace(
+        wafer_id,
+        telemetry_limit_per_run=max(1, min(telemetry_limit_per_run, 2000)),
+        include_debug=FAB_SYNTHETIC_DEBUG,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Wafer not found")
+    return result
+
+
+@app.get("/api/v1/fab/process-runs/{process_run_id}")
+def fab_process_run(process_run_id: str, telemetry_limit: int = 2000) -> dict[str, object]:
+    result = fab_storage.process_run_detail(
+        process_run_id,
+        telemetry_limit=max(1, min(telemetry_limit, 10_000)),
+        include_debug=FAB_SYNTHETIC_DEBUG,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Process run not found")
+    return result
+
+
+@app.get("/api/v1/process/{process_id}/live")
+def fab_process_live(
+    process_id: str,
+    equipment_id: str | None = None,
+    unit_id: str | None = None,
+    recipe_id: str | None = None,
+    limit: int = 200,
+) -> dict[str, object]:
+    return fab_storage.process_live(
+        process_id,
+        equipment_id=equipment_id,
+        unit_id=unit_id,
+        recipe_id=recipe_id,
+        limit=limit,
+    )
+
+
+@app.get("/api/v1/fab/rca/{process_run_id}")
+def fab_rca(process_run_id: str) -> dict[str, object]:
+    result = fab_storage.rca_for_run(process_run_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="RCA result not found")
+    return result
+
+
+@app.get("/api/v1/fab/metrics")
+def fab_runtime_metrics() -> dict[str, object]:
+    return fab_storage.fab_metrics()
+
+
+@app.get("/api/v1/fab/analysis/latest")
+def fab_latest_analysis() -> dict[str, object]:
+    """Latest local notebook/CLI summary; raw training data is never exposed."""
+    try:
+        return fab_analysis.latest_dashboard_summary()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/process/profiles")
@@ -323,7 +397,7 @@ def process_event_list(
 
 @app.get("/api/v1/lots")
 def lot_list(status: str | None = None, limit: int = 100) -> list[dict[str, object]]:
-    return list_lots(status=status, limit=limit)
+    return fab_storage.enrich_lots(list_lots(status=status, limit=limit))
 
 
 @app.get("/api/v1/quality/lots")
@@ -336,6 +410,9 @@ def quality_lot_detail(lot_id: str) -> dict[str, object]:
     result = quality_lot(lot_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Lot not found")
+    fab_trace = fab_storage.lot_trace(lot_id)
+    if fab_trace is not None:
+        result["fab_trace"] = fab_trace
     return result
 
 

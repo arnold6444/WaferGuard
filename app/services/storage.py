@@ -225,8 +225,10 @@ def init_db() -> None:
     seed_model_registry()
     cleanup_legacy_retraining_jobs()
     from app.services.chamber_storage import init_chamber_db  # noqa: PLC0415
+    from app.services.fab_storage import init_fab_db  # noqa: PLC0415
 
     init_chamber_db()
+    init_fab_db()
 
 
 def cleanup_legacy_retraining_jobs() -> None:

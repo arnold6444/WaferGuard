@@ -1,0 +1,193 @@
+schema_version: waferguard.fab.v2
+
+clock:
+  start_utc: "2026-01-01T00:00:00+00:00"
+  sample_interval_seconds: 1.0
+  metrology_lag_seconds: 300
+  inspection_lag_seconds: 600
+
+route: [photo, etch, deposition, cmp]
+
+lifecycle:
+  supported_states: [IDLE, LOAD, STARTUP, RUNNING, HOLD, ALARM, UNLOAD, CLEANING, MAINTENANCE, SHUTDOWN]
+  pre_run_states: [LOAD, STARTUP]
+  running_state: RUNNING
+  post_run_state: UNLOAD
+  maintenance_state: MAINTENANCE
+
+variation:
+  lot_sigma: 0.10
+  wafer_sigma: 0.07
+
+fusion:
+  threshold: 0.65
+  calibration_scale: 1.0
+  weights:
+    timeseries: 0.50
+    vision: 0.30
+    metrology: 0.20
+
+processes:
+  photo:
+    display_name: Photo
+    process_step: Photo
+    legacy_process_step: Lithography
+    unit_type: exposure_chamber
+    samples_per_run: 60
+    maintenance_every_cycles: 12
+    degradation:
+      focus_offset: 0.0025
+      overlay_nm: 0.025
+    equipment:
+      - id: PHOTO-001
+        bias: {exposure_dose: 0.05, focus_offset: -0.002}
+        units:
+          - {id: UNIT-01, bias: {focus_offset: -0.003, overlay_nm: -0.04}}
+          - {id: UNIT-02, bias: {focus_offset: 0.003, overlay_nm: 0.04}}
+      - id: PHOTO-002
+        bias: {exposure_dose: -0.05, focus_offset: 0.002}
+        units:
+          - {id: UNIT-01, bias: {focus_offset: -0.002, overlay_nm: -0.03}}
+          - {id: UNIT-02, bias: {focus_offset: 0.002, overlay_nm: 0.03}}
+    recipes:
+      - {id: PHOTO_DEMO_A, offsets: {exposure_dose: 0.0, focus_offset: 0.0}}
+      - {id: PHOTO_DEMO_B, offsets: {exposure_dose: 0.18, focus_offset: -0.004}}
+    phases: [idle, coat_track, expose, develop]
+    relations:
+      - {kind: linear, a: focus_offset, b: overlay_nm, coefficient: 0.45}
+      - {kind: correlation, a: track_temperature, b: developer_temperature, coefficient: 0.55}
+    metrology:
+      critical_dimension_nm:
+        target: 32.0
+        tolerance: 1.2
+        noise_std: 0.10
+        drivers: {focus_offset: 0.75, exposure_dose: -0.20}
+      overlay_nm:
+        target: 4.0
+        tolerance: 1.0
+        noise_std: 0.08
+        drivers: {overlay_nm: 0.80, focus_offset: 0.25}
+    vision_related_tags: [focus_offset, exposure_dose, overlay_nm]
+
+  etch:
+    display_name: Etch
+    process_step: Etch
+    unit_type: chamber
+    samples_per_run: 48
+    maintenance_every_cycles: 10
+    degradation:
+      chamber_pressure: 0.025
+      chamber_temperature: 0.030
+      resistance: 0.040
+    equipment:
+      - id: ETCH-001
+        bias: {chamber_pressure: -0.08, chamber_temperature: -0.12}
+        units:
+          - {id: CH-A, bias: {chamber_pressure: -0.05, total_gas_flow: 0.30}}
+          - {id: CH-B, bias: {chamber_pressure: 0.05, total_gas_flow: -0.30}}
+      - id: ETCH-002
+        bias: {chamber_pressure: 0.08, chamber_temperature: 0.12}
+        units:
+          - {id: CH-A, bias: {chamber_pressure: -0.04, total_gas_flow: 0.25}}
+          - {id: CH-B, bias: {chamber_pressure: 0.04, total_gas_flow: -0.25}}
+    recipes:
+      - {id: ETCH_OXIDE_A, offsets: {chamber_pressure: 0.0, source_rf_power: 0.0}}
+      - {id: ETCH_POLY_B, offsets: {chamber_pressure: -0.15, source_rf_power: 6.0}}
+    phases: [pumpdown, plasma_ignite, main_etch, purge]
+    relations:
+      - {kind: difference, a: chamber_pressure, b: total_gas_flow, coefficient: -0.30}
+      - {kind: linear, a: source_rf_power, b: resistance, coefficient: -0.27}
+    metrology:
+      etch_depth_nm:
+        target: 120.0
+        tolerance: 5.0
+        noise_std: 0.35
+        drivers: {source_rf_power: 1.30, chamber_pressure: -0.80, total_gas_flow: 0.45}
+      sidewall_angle_deg:
+        target: 89.0
+        tolerance: 1.5
+        noise_std: 0.10
+        drivers: {bias_rf_power: 0.55, chamber_pressure: -0.25}
+    vision_related_tags: [chamber_pressure, source_rf_power, total_gas_flow]
+
+  deposition:
+    display_name: Deposition
+    process_step: Deposition
+    unit_type: chamber
+    samples_per_run: 72
+    maintenance_every_cycles: 11
+    degradation:
+      precursor_flow: -0.050
+      chamber_pressure: 0.006
+      substrate_temperature: 0.040
+    equipment:
+      - id: DEP-001
+        bias: {chamber_pressure: -0.025, precursor_flow: -0.25}
+        units:
+          - {id: CH-A, bias: {precursor_flow: -0.30, substrate_temperature: -0.20}}
+          - {id: CH-B, bias: {precursor_flow: 0.30, substrate_temperature: 0.20}}
+      - id: DEP-002
+        bias: {chamber_pressure: 0.025, precursor_flow: 0.25}
+        units:
+          - {id: CH-A, bias: {precursor_flow: -0.25, substrate_temperature: -0.15}}
+          - {id: CH-B, bias: {precursor_flow: 0.25, substrate_temperature: 0.15}}
+    recipes:
+      - {id: CVD_DEMO_A, offsets: {precursor_flow: 0.0, substrate_temperature: 0.0}}
+      - {id: CVD_DEMO_B, offsets: {precursor_flow: 1.20, substrate_temperature: 1.0}}
+    phases: [pumpdown, heatup, deposition, purge]
+    relations:
+      - {kind: correlation, a: precursor_flow, b: carrier_gas_flow, coefficient: 0.65}
+      - {kind: linear, a: substrate_temperature, b: rf_power, coefficient: 0.50}
+    metrology:
+      film_thickness_nm:
+        target: 88.0
+        tolerance: 3.0
+        noise_std: 0.20
+        drivers: {precursor_flow: 1.10, substrate_temperature: 0.55, deposition_time: 0.35}
+      uniformity_percent:
+        target: 98.0
+        tolerance: 2.0
+        noise_std: 0.15
+        drivers: {precursor_flow: -0.50, chamber_pressure: -0.35}
+    vision_related_tags: [precursor_flow, carrier_gas_flow, substrate_temperature]
+
+  cmp:
+    display_name: CMP
+    process_step: CMP
+    unit_type: platen
+    samples_per_run: 60
+    maintenance_every_cycles: 9
+    degradation:
+      slurry_flow: -0.18
+      motor_current: 0.025
+      down_force: 0.006
+    equipment:
+      - id: CMP-001
+        bias: {down_force: -0.015, slurry_flow: -0.60}
+        units:
+          - {id: PLATEN-A, bias: {slurry_flow: -0.50, motor_current: -0.05}}
+          - {id: PLATEN-B, bias: {slurry_flow: 0.50, motor_current: 0.05}}
+      - id: CMP-002
+        bias: {down_force: 0.015, slurry_flow: 0.60}
+        units:
+          - {id: PLATEN-A, bias: {slurry_flow: -0.45, motor_current: -0.04}}
+          - {id: PLATEN-B, bias: {slurry_flow: 0.45, motor_current: 0.04}}
+    recipes:
+      - {id: CMP_DEMO_A, offsets: {down_force: 0.0, slurry_flow: 0.0}}
+      - {id: CMP_DEMO_B, offsets: {down_force: 0.06, slurry_flow: 2.0}}
+    phases: [load, ramp, polish, rinse]
+    relations:
+      - {kind: correlation, a: down_force, b: motor_current, coefficient: 0.75}
+      - {kind: correlation, a: platen_speed, b: carrier_speed, coefficient: 0.70}
+    metrology:
+      remaining_film_nm:
+        target: 42.0
+        tolerance: 2.5
+        noise_std: 0.18
+        drivers: {down_force: -0.70, platen_speed: -0.45, slurry_flow: -0.55}
+      within_wafer_nonuniformity_percent:
+        target: 3.0
+        tolerance: 1.2
+        noise_std: 0.10
+        drivers: {slurry_flow: -0.50, motor_current: 0.65}
+    vision_related_tags: [slurry_flow, down_force, motor_current]
