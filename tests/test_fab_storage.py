@@ -85,6 +85,13 @@ def test_schema_is_additive_and_equipment_unit_key_is_composite(fab_db: Path) ->
         assert "process_run_id" in db.table_columns(conn, "process_events")
         assert "process_run_id" in db.table_columns(conn, "inspections")
         assert "detector_context_json" in db.table_columns(conn, "process_telemetry")
+        assert {"measurements_json", "metrology_context_json"}.issubset(
+            db.table_columns(conn, "metrology_results")
+        )
+        assert {
+            "inspection_modality", "instrument_class", "image_type",
+            "sampling_level", "inspection_context_json",
+        }.issubset(db.table_columns(conn, "inspection_assets"))
 
     first = fab_storage.upsert_equipment_unit(
         {**identity(), "equipment_id": "CMP_EQ_01", "unit_id": "PLATEN_A"}
@@ -93,10 +100,20 @@ def test_schema_is_additive_and_equipment_unit_key_is_composite(fab_db: Path) ->
         {**identity(), "equipment_id": "CMP_EQ_02", "unit_id": "PLATEN_A"}
     )
     assert first["unit_id"] == second["unit_id"]
-    assert {item["equipment_id"] for item in fab_storage.equipment_overview("cmp")} == {
+    overview = fab_storage.equipment_overview("cmp")
+    assert {
         "CMP_EQ_01",
         "CMP_EQ_02",
-    }
+    }.issubset({item["equipment_id"] for item in overview})
+    assert all(item["has_runtime_data"] for item in overview[:2])
+    configured_only = [item for item in overview if not item["has_runtime_data"]]
+    assert configured_only
+    assert all(
+        item["runtime_supported"] and not item["connected"] and item["status"] == "not_connected"
+        for item in configured_only
+    )
+    assert configured_only[0]["equipment_class"]["id"] == "rotary_cmp_system"
+    assert "slurry_flow" in configured_only[0]["sensor_tags"]
 
 
 def test_envelope_dedupe_detector_fusion_trace_and_gt_isolation(fab_db: Path) -> None:
@@ -181,6 +198,24 @@ def test_envelope_dedupe_detector_fusion_trace_and_gt_isolation(fab_db: Path) ->
             message_type="metrology",
             payload={
                 "metrics": {"removal_rate": 91.2},
+                "measurements": [
+                    {
+                        "metric_id": "removal_rate",
+                        "display_name": "Removal Rate",
+                        "value": 91.2,
+                        "unit": "nm/min",
+                        "modality": "spectroscopic_reflectometry",
+                        "instrument_class": "film_thickness_metrology_system",
+                        "method": "derived_rate",
+                        "sampling_level": "inline_sample",
+                        "synthetic_proxy": True,
+                    }
+                ],
+                "metrology_context": {
+                    "process_id": "cmp",
+                    "measurement_scope": "post_process_inline_or_atline",
+                    "synthetic_proxy": True,
+                },
                 "available_at": "2026-08-18T04:05:00Z",
                 "detector_result": {
                     "model_version": "met-v1",
@@ -199,6 +234,15 @@ def test_envelope_dedupe_detector_fusion_trace_and_gt_isolation(fab_db: Path) ->
                 "image_key": "inspection/cmp-001.png",
                 "defect_type": "scratch",
                 "defect_severity": 0.8,
+                "inspection_modality": "darkfield_optical_surface_inspection",
+                "instrument_class": "patterned_wafer_surface_inspector",
+                "image_type": "top_down_darkfield_grayscale_proxy",
+                "sampling_level": "process_run",
+                "inspection_context": {
+                    "measurement_scope": "post_process_review",
+                    "synthetic_proxy": True,
+                },
+                "features": {"mean": 0.42},
                 "available_at": "2026-08-18T04:10:00Z",
                 "synthetic_debug": {
                     "mask_key": "debug/cmp-001-mask.png",
@@ -266,6 +310,17 @@ def test_envelope_dedupe_detector_fusion_trace_and_gt_isolation(fab_db: Path) ->
     cmp_run = trace["process_runs"][-1]
     assert cmp_run["fusion"]["fusion_version"] == "fusion-v2"
     assert cmp_run["metrology"][0]["metrics"]["removal_rate"] == 91.2
+    assert cmp_run["metrology"][0]["measurements"][0]["unit"] == "nm/min"
+    assert cmp_run["metrology"][0]["metrology_context"]["process_id"] == "cmp"
+    assert cmp_run["inspections"][0]["inspection_modality"] == (
+        "darkfield_optical_surface_inspection"
+    )
+    assert cmp_run["inspections"][0]["inspection_context"]["synthetic_proxy"] is True
+    assert cmp_run["inspections"][0]["metadata"]["features"]["mean"] == 0.42
+    assert cmp_run["equipment_context"]["equipment_class"]["id"] == "rotary_cmp_system"
+    assert cmp_run["post_process_plan"]["inspection"]["inspection_modality"] == (
+        "darkfield_optical_surface_inspection"
+    )
     assert "bbox" not in cmp_run["inspections"][0]
     assert "mask_key" not in cmp_run["inspections"][0]
     assert "fault_id" not in str(trace)

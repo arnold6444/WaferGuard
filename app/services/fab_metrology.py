@@ -61,6 +61,7 @@ class FabMetrologySimulator:
         metrics: dict[str, float] = {}
         quality_targets: dict[str, dict[str, float]] = {}
         metric_related: dict[str, list[str]] = {}
+        measurements: list[dict[str, Any]] = []
 
         for name, spec in specifications.items():
             target = float(spec["target"])
@@ -81,10 +82,29 @@ class FabMetrologySimulator:
                 "tolerance": tolerance,
                 "lower": target - tolerance,
                 "upper": target + tolerance,
+                "display_name": str(spec["display_name"]),
+                "unit": str(spec["unit"]),
+                "modality": str(spec["modality"]),
+                "instrument_class": str(spec["instrument_class"]),
+                "method": str(spec["method"]),
+                "sampling_level": str(spec["sampling_level"]),
             }
             metric_related[name] = [
                 tag for tag, _ in sorted(contributions.items(), key=lambda item: abs(item[1]), reverse=True)
             ]
+            measurements.append({
+                "metric_id": str(name),
+                "display_name": str(spec["display_name"]),
+                "value": metrics[name],
+                "unit": str(spec["unit"]),
+                "modality": str(spec["modality"]),
+                "instrument_class": str(spec["instrument_class"]),
+                "method": str(spec["method"]),
+                "sampling_level": str(spec["sampling_level"]),
+                "target": target,
+                "tolerance": tolerance,
+                "synthetic_proxy": True,
+            })
 
         normalized_errors = {
             name: abs(metrics[name] - target["target"]) / max(target["tolerance"], 1e-9)
@@ -104,15 +124,27 @@ class FabMetrologySimulator:
             related_tags=metric_related[worst_metric],
             observed_at=timestamp,
         )
+        modalities = list(dict.fromkeys(item["modality"] for item in measurements))
+        instruments = list(dict.fromkeys(item["instrument_class"] for item in measurements))
         return {
             "process_run_id": base.process_run_id,
             "metrics": metrics,
+            "measurements": measurements,
             # Keep both spellings during the v2 additive rollout. The envelope
             # persistence contract uses plural; API callers requested singular.
             "quality_target": quality_targets,
             "quality_targets": quality_targets,
+            "metrology_context": {
+                "process_id": base.process_id,
+                "measurement_scope": "post_process_inline_or_atline",
+                "modalities": modalities,
+                "instrument_classes": instruments,
+                "synthetic_proxy": True,
+                "disclaimer": "Synthetic metrology proxy; not instrument data or Fab control limits.",
+            },
             "available_at": utc_iso(timestamp),
             "detector_result": detector.to_dict(),
+            "related_tags": list(detector.related_tags),
         }
 
 
@@ -134,6 +166,7 @@ class FabInspectionSimulator:
         available_at: str | None = None,
     ) -> dict[str, Any]:
         base = _identity(identity)
+        inspection_config = dict(self.config["processes"][base.process_id]["inspection"])
         size = int(process_runtime.load_config().get("runtime", {}).get("image_size", 96))
         profile = process_runtime._profile(base.process_id)[1]
         clean = process_runtime._base_image(base.process_id, size, rng)
@@ -185,12 +218,23 @@ class FabInspectionSimulator:
         result = {
             "process_run_id": base.process_run_id,
             "image_key": image_key,
+            "inspection_modality": str(inspection_config["inspection_modality"]),
+            "instrument_class": str(inspection_config["instrument_class"]),
+            "image_type": str(inspection_config["image_type"]),
+            "sampling_level": str(inspection_config["sampling_level"]),
+            "inspection_context": {
+                **inspection_config,
+                "measurement_scope": "post_process_review",
+                "synthetic_proxy": True,
+                "disclaimer": "Procedural image proxy; not SEM, TEM, or optical instrument output.",
+            },
             "features": {
                 name: round(float(value), 8)
                 for name, value in zip(VISION_FEATURE_NAMES, actual_features, strict=True)
             },
             "available_at": utc_iso(timestamp),
             "detector_result": detector.to_dict(),
+            "related_tags": list(detector.related_tags),
         }
         if synthetic_debug:
             result["synthetic_debug"] = synthetic_debug

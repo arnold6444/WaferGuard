@@ -24,6 +24,7 @@ from app.services.fab_metrology import FabInspectionSimulator, FabMetrologySimul
 from app.services.fab_schema import (
     FAB_FEATURE_CONTRACT,
     FAB_SCHEMA_VERSION,
+    FabEquipmentContext,
     FabEventIdentity,
     as_utc,
     config_fingerprint,
@@ -108,6 +109,20 @@ def validate_fab_config(config: Mapping[str, Any]) -> dict[str, Any]:
         if int(process.get("maintenance_every_cycles", 0)) < 1:
             raise ValueError(f"{process_id}.maintenance_every_cycles must be positive")
         known_tags = set(specs[process_id])
+        equipment_class = process.get("equipment_class") or {}
+        if not equipment_class.get("id") or not equipment_class.get("display_name"):
+            raise ValueError(f"{process_id}.equipment_class requires id and display_name")
+        if not str(process.get("unit_class") or ""):
+            raise ValueError(f"{process_id}.unit_class must not be empty")
+        sensor_tags = process.get("sensor_tags") or {}
+        if set(sensor_tags) != known_tags:
+            raise ValueError(
+                f"{process_id}.sensor_tags must describe exactly {sorted(known_tags)}"
+            )
+        for tag, definition in sensor_tags.items():
+            for field in ("display_name", "unit", "sensor_type", "role"):
+                if not str(definition.get(field) or ""):
+                    raise ValueError(f"{process_id}.sensor_tags.{tag}.{field} must not be empty")
         equipment = process.get("equipment") or []
         if not equipment:
             raise ValueError(f"{process_id}.equipment must not be empty")
@@ -116,6 +131,8 @@ def validate_fab_config(config: Mapping[str, Any]) -> dict[str, Any]:
             equipment_id = str(tool.get("id") or "")
             if not equipment_id or not tool.get("units"):
                 raise ValueError(f"{process_id} equipment requires id and units")
+            if tool.get("equipment_class_id") != equipment_class["id"] or not tool.get("display_name"):
+                raise ValueError(f"{process_id} equipment must expose its class and display_name")
             unknown = set(tool.get("bias") or {}) - known_tags
             if unknown:
                 raise ValueError(f"Unknown {process_id} equipment bias tags: {sorted(unknown)}")
@@ -124,6 +141,8 @@ def validate_fab_config(config: Mapping[str, Any]) -> dict[str, Any]:
                 key = (equipment_id, unit_id)
                 if not unit_id or key in composite_units:
                     raise ValueError(f"Duplicate or empty FAB unit key: {key}")
+                if unit.get("unit_class") != process["unit_class"] or not unit.get("display_name"):
+                    raise ValueError(f"{process_id} unit must expose its class and display_name")
                 composite_units.add(key)
                 unknown = set(unit.get("bias") or {}) - known_tags
                 if unknown:
@@ -132,6 +151,8 @@ def validate_fab_config(config: Mapping[str, Any]) -> dict[str, Any]:
         if not recipes or len({str(item.get("id")) for item in recipes}) != len(recipes):
             raise ValueError(f"{process_id}.recipes must contain unique recipes")
         for recipe in recipes:
+            if not recipe.get("recipe_class") or not recipe.get("display_name"):
+                raise ValueError(f"{process_id} recipes must expose recipe_class and display_name")
             unknown = set(recipe.get("offsets") or {}) - known_tags
             if unknown:
                 raise ValueError(f"Unknown {process_id} recipe offset tags: {sorted(unknown)}")
@@ -144,12 +165,21 @@ def validate_fab_config(config: Mapping[str, Any]) -> dict[str, Any]:
                 raise ValueError(f"Relation references an unknown {process_id} tag")
             _finite(relation.get("coefficient"), "relation.coefficient")
         for metric, metric_spec in (process.get("metrology") or {}).items():
+            for field in (
+                "display_name", "unit", "modality", "instrument_class", "method", "sampling_level",
+            ):
+                if not str(metric_spec.get(field) or ""):
+                    raise ValueError(f"{process_id}.metrology.{metric}.{field} must not be empty")
             _finite(metric_spec.get("target"), f"{metric}.target")
             if _finite(metric_spec.get("tolerance"), f"{metric}.tolerance") <= 0:
                 raise ValueError(f"{metric}.tolerance must be positive")
             unknown = set(metric_spec.get("drivers") or {}) - known_tags
             if unknown:
                 raise ValueError(f"Unknown {process_id} metrology driver tags: {sorted(unknown)}")
+        inspection = process.get("inspection") or {}
+        for field in ("display_name", "inspection_modality", "instrument_class", "image_type", "sampling_level"):
+            if not str(inspection.get(field) or ""):
+                raise ValueError(f"{process_id}.inspection.{field} must not be empty")
     return value
 
 
@@ -382,6 +412,13 @@ class VirtualFabGenerator:
             equipment_id=equipment_id, unit_id=unit_id, recipe_id=recipe_id,
             cycle_index=cycle_index, cycle_since=cycle_since, run_id=run_id, observed_at=run_start,
         )
+        equipment_context = FabEquipmentContext.from_config(
+            process_id=process_id,
+            process=process,
+            equipment=tool,
+            unit=unit,
+            recipe=recipe,
+        ).to_dict()
         interval = float(self.config["clock"]["sample_interval_seconds"])
         state_events: list[dict[str, Any]] = []
         state_index = 0
@@ -452,6 +489,7 @@ class VirtualFabGenerator:
         attention = bool(metrology["detector_result"]["is_anomaly"] or inspection["detector_result"]["is_anomaly"])
         result: dict[str, Any] = {
             "identity": base.to_dict(),
+            "equipment_context": equipment_context,
             "state_events": state_events,
             "telemetry": telemetry,
             "outcome": {
@@ -467,6 +505,9 @@ class VirtualFabGenerator:
                 "feature_contract": FAB_FEATURE_CONTRACT,
                 "config_fingerprint": self.config_fingerprint,
                 "simulation_id": self.simulation_id,
+                "equipment_class_id": equipment_context["equipment_class"]["id"],
+                "unit_class": equipment_context["unit_class"],
+                "recipe_class": equipment_context["recipe_class"],
                 "synthetic": True,
             },
         }
@@ -542,6 +583,17 @@ class VirtualFabGenerator:
             observed_at=observed_at, machine_state="RUNNING", phase=phase,
             phase_progress=phase_progress,
         )
+        process = self.config["processes"][base.process_id]
+        equipment = next(item for item in process["equipment"] if str(item["id"]) == base.equipment_id)
+        unit = next(item for item in equipment["units"] if str(item["id"]) == base.unit_id)
+        recipe = next(item for item in process["recipes"] if str(item["id"]) == base.recipe_id)
+        equipment_context = FabEquipmentContext.from_config(
+            process_id=base.process_id,
+            process=process,
+            equipment=equipment,
+            unit=unit,
+            recipe=recipe,
+        ).to_dict()
         detector_context = {
             "feature_contract": FAB_FEATURE_CONTRACT,
             "config_fingerprint": self.config_fingerprint,
@@ -553,6 +605,8 @@ class VirtualFabGenerator:
             "feature_vector": feature_vector,
             "normalized_values": {key: float(value) for key, value in normalized.items()},
             "expected_baseline": {key: float(value) for key, value in expected.items()},
+            "equipment_context": equipment_context,
+            "sensor_catalog": equipment_context["sensor_tags"],
             "related_tags": list(dict.fromkeys(related_tags)),
             "generator_version": generator_version,
         }

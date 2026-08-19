@@ -15,6 +15,8 @@ const TAB_DEFS = [
   { id: "model", ko: "모델", en: "Model", icon: "box" },
 ];
 const MULTIMODAL_RUNTIME = new Set(["photo", "deposition", "cmp"]);
+const FAB_V2_PROCESSES = ["photo", "etch", "deposition", "cmp"];
+const FAB_V2_RUNTIME = new Set(FAB_V2_PROCESSES);
 const DEFAULT_PROFILES = [
   ["oxidation", "Oxidation", "Furnace"],
   ["photo", "Photo", "Scanner / Track"],
@@ -38,12 +40,12 @@ function FilterSelect({ label, value, values, onChange, allLabel }) {
   );
 }
 
-function DemoProcess({ profile, section }) {
+function DisconnectedProcess({ profile, section }) {
   const { text } = useUi();
   const params = profile.parameters || [];
   return (
     <div className="process-section">
-      <div className="source-notice is-demo"><Icon name="alert" size={13} />{text("데모 프로필 · 연결 안 됨 · 실제 Fab telemetry가 아닙니다.", "Demo profile · Not connected · Not real Fab telemetry.")}</div>
+      <div className="source-notice is-demo"><Icon name="alert" size={13} />{text("확장 프로필 · 현재 FAB v2 runtime에 연결되지 않았습니다.", "Extension profile · Not connected to the FAB v2 runtime.")}</div>
       <section className="panel process-hero is-demo">
         <div>
           <div className="chamber-eyebrow"><span />{profile.display_name.toUpperCase()} · {text("확장 프로필", "EXTENSION PROFILE")}</div>
@@ -52,7 +54,7 @@ function DemoProcess({ profile, section }) {
         </div>
         <span className="chip">{section.toUpperCase()} · {text("연결 안 됨", "NOT CONNECTED")}</span>
       </section>
-      <Panel title={text(`${profile.display_name} 파라미터 프로필`, `${profile.display_name} parameter profile`)} icon="layers" right={<span className="chip">{text("데모 메타데이터", "DEMO METADATA")}</span>}>
+      <Panel title={text(`${profile.display_name} 파라미터 프로필`, `${profile.display_name} parameter profile`)} icon="layers" right={<span className="chip">{text("연결 전 메타데이터", "UNCONNECTED METADATA")}</span>}>
         <div className="process-profile-grid">
           {params.map(item => <div key={item.id}><span>{item.label}</span><strong className="mono">— {item.unit}</strong><small>{item.normal_range}</small></div>)}
         </div>
@@ -65,6 +67,8 @@ export default function ProcessMonitoringView({ target }) {
   const { language, text } = useUi();
   const [profiles, setProfiles] = useState(DEFAULT_PROFILES);
   const [equipment, setEquipment] = useState([]);
+  const [definitions, setDefinitions] = useState([]);
+  const [runtimeByProcess, setRuntimeByProcess] = useState({});
   const [processId, setProcessId] = useState(target?.processId || "etch");
   const [tab, setTab] = useState(target?.tab || "overview");
   const [filters, setFilters] = useState({ equipment: target?.equipmentId || "all", unit: target?.unitId || "all", recipe: target?.recipeId || "all" });
@@ -74,10 +78,27 @@ export default function ProcessMonitoringView({ target }) {
     const loadInventory = () => Promise.allSettled([
         fetchJson("/api/v1/process/profiles"),
         fetchJson("/api/v1/fab/equipment"),
-      ]).then(([profileResult, equipmentResult]) => {
+        fetchJson("/api/v1/fab/process-definitions"),
+        ...FAB_V2_PROCESSES.map(id => fetchJson(`/api/v1/process/${id}/live?limit=1`)),
+      ]).then(([profileResult, equipmentResult, definitionResult, ...runtimeResults]) => {
         if (cancelled) return;
         if (profileResult.status === "fulfilled" && Array.isArray(profileResult.value) && profileResult.value.length) setProfiles(profileResult.value);
         if (equipmentResult.status === "fulfilled") setEquipment(normalizeEquipment(equipmentResult.value));
+        if (definitionResult.status === "fulfilled" && Array.isArray(definitionResult.value)) setDefinitions(definitionResult.value);
+        setRuntimeByProcess(Object.fromEntries(FAB_V2_PROCESSES.map((id, index) => {
+          const result = runtimeResults[index];
+          if (result?.status !== "fulfilled") return [id, { apiAvailable: false, connected: false, hasData: false }];
+          const value = result.value || {};
+          const rows = Array.isArray(value.telemetry) ? value.telemetry : [];
+          return [id, {
+            apiAvailable: true,
+            connected: Boolean(value.connected),
+            runtimeSupported: Boolean(value.runtime_supported),
+            hasData: value.has_runtime_data ?? Boolean(value.process_run || value.current || rows.length),
+            current: value.current || rows.at(-1) || null,
+            runState: value.run_state || null,
+          }];
+        })));
       });
     loadInventory();
     const timer = window.setInterval(loadInventory, 5000);
@@ -92,18 +113,20 @@ export default function ProcessMonitoringView({ target }) {
   }, [target]);
 
   const selected = useMemo(() => profiles.find(item => item.process_id === processId), [profiles, processId]);
-  const isRuntime = processId === "etch" || MULTIMODAL_RUNTIME.has(processId);
+  const selectedDefinition = useMemo(() => definitions.find(item => item.process_id === processId), [definitions, processId]);
+  const isRuntime = FAB_V2_RUNTIME.has(processId);
   const tabs = useMemo(() => TAB_DEFS.map(item => ({ ...item, label: language === "en" ? item.en : item.ko, en: null })), [language]);
   const processEquipment = useMemo(() => equipment.filter(item => item.process_id === processId), [equipment, processId]);
   const filterValues = useMemo(() => {
     const forEquipment = filters.equipment === "all" ? processEquipment : processEquipment.filter(item => item.equipment_id === filters.equipment);
     const forUnit = filters.unit === "all" ? forEquipment : forEquipment.filter(item => item.unit_id === filters.unit);
+    const configuredRecipes = (selectedDefinition?.recipes || []).map(item => item.recipe_id).filter(Boolean);
     return {
       equipment: [...new Set(processEquipment.map(item => item.equipment_id).filter(Boolean))],
       unit: [...new Set(forEquipment.map(item => item.unit_id).filter(Boolean))],
-      recipe: [...new Set(forUnit.map(item => item.recipe_id).filter(Boolean))],
+      recipe: [...new Set([...forUnit.map(item => item.recipe_id).filter(Boolean), ...configuredRecipes])],
     };
-  }, [filters.equipment, filters.unit, processEquipment]);
+  }, [filters.equipment, filters.unit, processEquipment, selectedDefinition]);
 
   function updateFilter(key, value) {
     setFilters(current => {
@@ -122,12 +145,41 @@ export default function ProcessMonitoringView({ target }) {
     <div>
       <div className="process-selector" role="list" aria-label={text("공정 선택", "Process selector")}>
         {profiles.map(profile => {
-          const connected = equipment.some(item => item.process_id === profile.process_id && item.connected !== false);
+          const isFabV2 = FAB_V2_RUNTIME.has(profile.process_id);
+          const runtime = runtimeByProcess[profile.process_id];
+          const units = equipment.filter(item => item.process_id === profile.process_id);
+          const authoritativeRunState = String(runtime?.runState || "").toLowerCase();
+          const running = authoritativeRunState
+            ? authoritativeRunState === "running"
+            : units.some(item => String(item.machine_state || "").toUpperCase() === "RUNNING");
+          const state = !isFabV2
+            ? "offline"
+            : !runtime?.apiAvailable
+              ? "unavailable"
+              : running
+                ? "live"
+                : runtime.hasData
+                  ? "stored"
+                  : "ready";
+          const stateLabel = {
+            live: text("LIVE", "LIVE"),
+            stored: text("최근 Run 저장됨", "LATEST STORED"),
+            ready: text("Runtime 준비", "RUNTIME READY"),
+            unavailable: text("API 확인 필요", "API UNAVAILABLE"),
+            offline: text("연결 안 됨", "NOT CONNECTED"),
+          }[state];
           return (
-            <button type="button" key={profile.process_id} className={`focusable ${processId === profile.process_id ? "is-active" : ""}`} onClick={() => chooseProcess(profile.process_id)}>
-              <span className={`status-dot ${connected ? "status-normal" : "status-offline"}`} />
+            <button
+              type="button"
+              key={profile.process_id}
+              className={`focusable ${processId === profile.process_id ? "is-active" : ""}`}
+              data-runtime-state={state}
+              title={isFabV2 ? text(`${profile.display_name} FAB v2 runtime · ${stateLabel}`, `${profile.display_name} FAB v2 runtime · ${stateLabel}`) : stateLabel}
+              onClick={() => chooseProcess(profile.process_id)}
+            >
+              <span className={`status-dot ${state === "live" ? "status-normal" : state === "stored" ? "status-warning" : "status-offline"}`} />
               <span>{profile.display_name}</span>
-              <small>{connected ? text("Synthetic Runtime", "Synthetic Runtime") : text("데모", "Demo")}</small>
+              <small>{stateLabel}</small>
             </button>
           );
         })}
@@ -142,10 +194,10 @@ export default function ProcessMonitoringView({ target }) {
         </div>
       )}
       <SubTabs tabs={tabs} active={tab} onChange={setTab} />
-      {isRuntime ? <FabLivePanel processId={processId} filters={filters} /> : null}
+      {isRuntime ? <FabLivePanel processId={processId} filters={filters} definition={selectedDefinition} /> : null}
       {processId === "etch" ? <EtchMonitoring section={tab} filters={filters} onEquipmentSelect={value => updateFilter("equipment", value)} /> : null}
       {selected && MULTIMODAL_RUNTIME.has(processId) ? <GenericProcessMonitoring profile={selected} section={tab} filters={filters} /> : null}
-      {selected && !isRuntime ? <DemoProcess profile={selected} section={tab} /> : null}
+      {selected && !isRuntime ? <DisconnectedProcess profile={selected} section={tab} /> : null}
     </div>
   );
 }

@@ -40,6 +40,65 @@ def test_config_contract_rejects_executable_or_unknown_relations():
         validate_fab_config(invalid)
 
 
+def test_process_specific_equipment_sensor_and_measurement_contracts():
+    config = load_fab_config()
+    expected_classes = {
+        "photo": "arf_immersion_lithography_cell",
+        "etch": "icp_rie_etch_system",
+        "deposition": "pecvd_deposition_system",
+        "cmp": "rotary_cmp_system",
+    }
+    for process_id, expected_class in expected_classes.items():
+        process = config["processes"][process_id]
+        assert process["equipment_class"]["id"] == expected_class
+        assert process["sensor_tags"]
+        assert all(
+            {"display_name", "unit", "sensor_type", "role"}.issubset(sensor)
+            for sensor in process["sensor_tags"].values()
+        )
+        assert all(
+            {"display_name", "unit", "modality", "instrument_class", "method", "sampling_level"}
+            .issubset(metric)
+            for metric in process["metrology"].values()
+        )
+
+    etch = config["processes"]["etch"]
+    assert etch["metrology"]["post_etch_linewidth_nm"]["modality"] == "cd_sem"
+    assert etch["metrology"]["etch_depth_nm"]["modality"] == "optical_cd_scatterometry"
+    assert etch["inspection"]["inspection_modality"] == "top_down_review_sem"
+    assert {item["modality"] for item in etch["inspection"]["escalation_modalities"]} == {
+        "fib_sem_cross_section", "tem_stem_cross_section",
+    }
+    assert config["processes"]["deposition"]["metrology"]["film_thickness_nm"]["modality"] == (
+        "spectroscopic_ellipsometry"
+    )
+    assert config["processes"]["cmp"]["inspection"]["inspection_modality"] == (
+        "darkfield_optical_surface_inspection"
+    )
+
+
+def test_generated_etch_run_exposes_public_equipment_and_metrology_context():
+    config = load_fab_config()
+    config["processes"]["etch"]["samples_per_run"] = 2
+    generator = VirtualFabGenerator(config=config, seed=13, simulation_id="SIM-CONTRACT")
+    generator._inspection.persist_images = False
+    run = generator.generate_process_run("LOT-C", 1, "etch")
+
+    assert run["equipment_context"]["equipment_class"]["id"] == "icp_rie_etch_system"
+    assert run["equipment_context"]["unit_class"] == "vacuum_process_chamber"
+    telemetry_context = run["telemetry"][0]["detector_context"]
+    assert telemetry_context["equipment_context"]["sensor_tags"]["chamber_pressure"]["unit"] == "mTorr"
+    measurements = {item["metric_id"]: item for item in run["metrology"]["measurements"]}
+    assert measurements["post_etch_linewidth_nm"]["instrument_class"] == "critical_dimension_sem"
+    assert measurements["etch_depth_nm"]["modality"] == "optical_cd_scatterometry"
+    assert run["inspection"]["inspection_modality"] == "top_down_review_sem"
+    assert run["inspection"]["inspection_context"]["escalation_policy"] == (
+        "candidate_evidence_review_only"
+    )
+    assert "fault_id" not in str(run["metrology"])
+    assert "ground_truth" not in str(run["inspection"])
+
+
 def test_fixed_seed_reproduces_identity_payload_and_feature_contract(local_images):
     left = VirtualFabGenerator(seed=17, simulation_id="SIM-REPRO")
     right = VirtualFabGenerator(seed=17, simulation_id="SIM-REPRO")

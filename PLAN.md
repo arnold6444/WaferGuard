@@ -470,3 +470,101 @@ git diff --check
 - 실행/구조 문서가 실제 명령과 data/artifact 위치를 설명한다.
 - 불필요한 산출물은 제거되며 기존 runtime state와 공개 계약은 보존된다.
 - 로컬 검증과 GitHub CI가 통과하고 PR #11이 main에 병합된다.
+
+---
+
+# FAB Equipment Investigation & Anomaly Workbench Delta (2026-08-18)
+
+## Goal
+
+네 공정 runtime의 상태를 같은 기준으로 표시하고, 실행 중이거나 최근 완료된 process run을 장비 중심으로 조사할 수 있게 한다. 기존 EDA notebook은 실제 Ground Truth와 baseline prediction을 분리한 leakage-safe 이상탐지 성능 실험 Workbench로 교체한다.
+
+## Scope
+
+### In Scope
+
+- Photo/Etch/Deposition/CMP의 `Synthetic Runtime` 지원 상태와 실제 최근 수신/가동 상태 분리
+- 실행 중 run 우선, 없으면 최신 완료 run을 보여주는 Process Monitoring
+- Equipment/Unit/Recipe, sensor tag, phase, anomaly evidence, 공정별 metrology/inspection modality 표시
+- Etch CD-SEM 선폭/프로파일 등 공정별 현실적인 계측 자산과 metric 계약
+- 한/영 전환 시 header control 폭과 layout 안정화
+- detector prediction과 `simulation_faults` 평가 GT의 명시적 분리
+- process-run chronological Train/Validation/Test split, normal-only Train, leakage guard
+- 기존 네 TS 후보, prefix 기반 feature-set ablation, validation threshold/leaderboard/metric/lock/manifest 구조
+- 기본 OFF인 experiment/final-test/artifact notebook과 Python 재사용 모듈
+- 기존 dashboard summary의 additive 확장
+
+### Out of Scope
+
+- 실제 데이터 학습, hyperparameter search, benchmark, final test 실행
+- candidate artifact 생성/등록, Staging/Production 승격
+- notebook 전체 실행, 모델 재학습, 대량 synthetic 생성
+- 실제 FAB calibration 또는 계측 장비 제어
+- 기존 네 공정 밖의 runtime 추가
+
+## Decisions
+
+- 네 공정은 모두 같은 `Synthetic Runtime` capability로 표시한다. 녹색 연결 표시는 실제 inventory/최근 row에만 사용하고 Demo와 혼용하지 않는다.
+- `Current Process Run`은 실행 중 row를 우선하며, stream이 이미 끝났으면 최신 완료 run을 `Latest completed`로 표시한다.
+- 장비 판단은 sensor tag, relation deviation, metrology/inspection evidence와 engineer review를 함께 보여주되 원인 단정 대신 Candidate/Recommended check 표현을 유지한다.
+- `baseline_detector_is_anomaly`는 비교용 prediction이고 label/feature가 아니다. Ground Truth는 `simulation_faults`에서 평가 경로로만 join한다.
+- identity, baseline prediction, 모든 GT column은 candidate feature allowlist에서 제외한다.
+- split, preprocessing, threshold 선택은 Train/Validation 계약을 지키며 Test는 명시적 최종 1회 실행 전까지 봉인한다.
+- notebook 기본 플래그 `RUN_EXPERIMENT`, `RUN_FINAL_TEST`, `CREATE_CANDIDATE`는 모두 `False`다.
+
+## Architecture / Flow
+
+```text
+FAB equipment config
+  -> equipment class / unit / recipe / sensor tags
+  -> runtime telemetry + state + detector context
+  -> live API (running-first, latest-completed fallback)
+  -> equipment-focused Process Monitoring
+  -> process-specific metrology/inspection evidence
+
+Runtime feature export
+  + baseline detector prediction (comparison only)
+  + simulation_faults GT (evaluation only)
+  -> label audit / leakage guard
+  -> chronological grouped split
+  -> feature-set + candidate configuration preview
+  -> opt-in validation experiment
+  -> winner lock -> opt-in final test -> opt-in artifact
+```
+
+## Implementation Steps
+
+1. Inventory/live API와 process cards의 capability/connection/run-state 계약을 바로잡는다.
+2. 네 공정 장비 class, sensor tag catalog, 공정별 metrology/inspection modality/metric을 additive 확장한다.
+3. Process Monitoring에 최신 run 상태, tag/equipment context, 계측 evidence를 연결하고 언어 토글 layout을 고정한다.
+4. runtime export label contract와 evaluation-only GT join을 구현한다.
+5. grouped chronological split, leakage guard, feature groups/sets, candidate/search preview, pure metric/threshold/leaderboard/manifest 기능을 구현한다.
+6. notebook을 안내부터 Summary까지 opt-in experiment 구조로 재작성하고 dashboard summary 호환을 유지한다.
+7. static/contract/pure-function test, import/compile, notebook JSON parse, frontend build로만 검증한다.
+
+## Definition of Done
+
+- Photo/Etch/Deposition/CMP가 모두 같은 Synthetic Runtime 범주이며 실제 연결 여부가 별도로 보인다.
+- 선택 공정의 실행 중 또는 최신 완료 run identity/telemetry가 빈 placeholder 대신 표시된다.
+- 공정별 equipment/unit/recipe, sensor tags, metrology tool/modality/metric이 구체적으로 확인된다.
+- 한/영 전환으로 상단 layout이 흔들리지 않는다.
+- baseline prediction과 synthetic GT가 분리되고 feature leakage가 차단된다.
+- 한 process run/wafer가 여러 split에 겹치지 않으며 normal-only Train을 지원한다.
+- 네 기존 TS 후보와 다섯 feature-set의 validation 비교 구조가 있다.
+- threshold는 validation에서 F2/FPR/Precision 순으로 선택할 수 있다.
+- F1/F2/FPR/false alarms per hour/detection delay/fault/context metric과 leaderboard/lock/manifest 계약이 있다.
+- 기본 notebook 실행 경로는 데이터 검증/EDA/split preview만 수행하고 어떠한 model fit/artifact 생성도 하지 않는다.
+- 기존 FAB API/dashboard/Production runtime 계약이 유지된다.
+
+## Verification
+
+이번 Delta에서 Codex는 실제 모델 학습 또는 notebook 실행을 하지 않는다.
+
+```powershell
+$env:STORAGE_BACKEND='sqlite'
+python -m compileall -q app scripts tests
+python -m pytest -q -W error tests/test_fab_analysis.py tests/test_fab_experiment.py tests/test_fab_storage.py tests/test_fab_api.py
+python -c "import json, pathlib; json.loads(pathlib.Path('notebooks/fab_local_analysis.ipynb').read_text(encoding='utf-8'))"
+Push-Location frontend; npm.cmd run build; Pop-Location
+git diff --check
+```

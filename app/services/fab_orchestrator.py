@@ -298,8 +298,12 @@ def envelopes_for_process_run(result: Mapping[str, Any]) -> list[dict[str, Any]]
                 key: item[key]
                 for key in (
                     "metrics",
+                    "measurements",
                     "quality_target",
                     "quality_targets",
+                    "metrology_context",
+                    "instrument_class",
+                    "sampling_level",
                     "available_at",
                     "detector_result",
                     "related_tags",
@@ -314,6 +318,11 @@ def envelopes_for_process_run(result: Mapping[str, Any]) -> list[dict[str, Any]]
                 for key in (
                     "image_key",
                     "features",
+                    "inspection_context",
+                    "inspection_modality",
+                    "instrument_class",
+                    "image_type",
+                    "sampling_level",
                     "available_at",
                     "detector_result",
                     "related_tags",

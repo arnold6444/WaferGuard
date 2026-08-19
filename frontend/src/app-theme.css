@@ -37,6 +37,7 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
+html { overflow-y: scroll; scrollbar-gutter: stable; }
 html, body, #root, .app-root { min-height: 100%; }
 body, .app-root { background-color: var(--bg); color: var(--text); }
 
@@ -74,8 +75,8 @@ input, select, textarea, table, th, td {
 .context-bar h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.02em; color: var(--text); }
 .context-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 
-.language-switch { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
-.language-switch button { border: 0; border-radius: 6px; padding: 5px 8px; cursor: pointer; color: var(--text-3); background: transparent; font: 600 10.5px/1.2 inherit; }
+.language-switch { display: inline-grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 132px; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.language-switch button { width: 100%; min-width: 0; border: 0; border-radius: 6px; padding: 5px 4px; cursor: pointer; color: var(--text-3); background: transparent; font: 600 10.5px/1.2 inherit; text-align: center; white-space: nowrap; }
 .language-switch button[data-active="true"] { color: var(--accent); background: var(--panel); box-shadow: var(--shadow); }
 .theme-toggle { padding: 6px 9px; }
 
@@ -101,5 +102,5 @@ html[data-theme="dark"] img:not([src*="wafer"]):not([src*="process_runtime"]) { 
 @media (max-width: 980px) {
   .header-status-group { display: none; }
   .app-sidebar { width: 176px; }
-  .language-switch button { padding-inline: 6px; }
+  .language-switch { width: 124px; }
 }

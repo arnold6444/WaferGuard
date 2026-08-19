@@ -33,7 +33,7 @@ function MetricCard({ label, value, unit, detail, tone = "accent" }) {
 
 function SourceNotice() {
   const { text } = useUi();
-  return <div className="source-notice"><Icon name="alert" size={13} />{text("Synthetic runtime · 표시 단위, 범위, 중요도는 실제 Fab calibration 값이 아닙니다.", "Synthetic runtime · Display units, ranges, and importance are not Fab-calibrated values.")}</div>;
+  return <div className="source-notice"><Icon name="alert" size={13} />{text("Legacy Chamber stream · 위 FAB v2 Process Run과 별도 데이터 소스이며, 표시 단위와 범위는 실제 Fab calibration 값이 아닙니다.", "Legacy Chamber stream · This is a separate data source from the FAB v2 Process Run above; display units and ranges are not Fab-calibrated values.")}</div>;
 }
 
 function EmptyState({ error }) {
@@ -143,11 +143,11 @@ export default function EtchMonitoring({ section = "overview", filters, onEquipm
         <>
           <section className="panel process-hero">
             <div>
-              <div className="chamber-eyebrow"><span />ETCH · RESISTANCE / EQUIPMENT CONDITION</div>
+              <div className="chamber-eyebrow"><span />ETCH · LEGACY CHAMBER RESISTANCE STREAM</div>
               <h2>{text("설비 상태와 residual 이상을 한 흐름에서 확인합니다.", "Monitor equipment condition and residual anomalies in one flow.")}</h2>
-              <p>{text("기존 Chamber Resistance Live를 Process Monitoring의 연결된 Etch 구현으로 재사용합니다.", "The existing Chamber Resistance Live runtime is reused as the connected Etch implementation in Process Monitoring.")}</p>
+              <p>{text("기존 Chamber Resistance runtime과 MLOps 화면을 보존한 별도 telemetry 흐름입니다. 위 FAB v2 Run 상태와 같은 stream으로 해석하지 않습니다.", "This separate telemetry flow preserves the existing Chamber Resistance runtime and MLOps views. Do not interpret it as the same stream as the FAB v2 Run above.")}</p>
             </div>
-            <span className={`chamber-status ${data.status?.state === "LIVE" ? "chamber-status-low" : "chamber-status-med"}`}><span />{data.status?.state || "CONNECTING"}</span>
+            <span className={`chamber-status ${data.status?.state === "LIVE" ? "chamber-status-low" : "chamber-status-med"}`}><span />LEGACY {data.status?.state || "CONNECTING"}</span>
           </section>
           <div className="fab-metrics">
             <MetricCard label={text("설비", "Equipment")} value={data.equipment.length} unit={text("대", "tools")} detail={`${data.equipment.filter(item => item.is_anomaly).length} ${text("이상", "anomaly")}`} />

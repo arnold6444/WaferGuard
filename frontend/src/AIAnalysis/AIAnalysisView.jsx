@@ -33,6 +33,20 @@ function evidenceLabel(value) {
   return value.label || value.signal || value.tag || value.description || value.type || "evidence";
 }
 
+function metricValue(metrics, ...keys) {
+  for (const key of keys) {
+    const value = metrics?.[key];
+    if (value != null && Number.isFinite(Number(value))) return Number(value).toFixed(3);
+  }
+  return "—";
+}
+
+function experimentStatusLabel(value) {
+  if (value == null) return "—";
+  if (typeof value === "string") return value.replaceAll("_", " ");
+  return String(value.status || value.phase || value.state || value.message || "configured").replaceAll("_", " ");
+}
+
 function LocalAnalysisPanel() {
   const { text } = useUi();
   const [state, setState] = useState({ loading: true, payload: null, error: "" });
@@ -44,11 +58,11 @@ function LocalAnalysisPanel() {
       .then(payload => { if (!cancelled) setState({ loading: false, payload, error: "" }); })
       .catch(error => {
         if (!cancelled && error.name !== "AbortError") {
-          setState({ loading: false, payload: null, error: text("로컬 분석 결과를 불러오지 못했습니다.", "Could not load local analysis results.") });
+          setState({ loading: false, payload: null, error: true });
         }
       });
     return () => { cancelled = true; controller.abort(); };
-  }, [text]);
+  }, []);
 
   const payload = state.payload || {};
   const ready = payload.status === "ready";
@@ -56,11 +70,23 @@ function LocalAnalysisPanel() {
   const correlations = Array.isArray(payload.top_correlations) ? payload.top_correlations.slice(0, 5) : [];
   const maximum = Math.max(0.000001, ...features.map(item => Number(item.importance) || 0));
   const metrics = payload.model?.metrics || {};
+  const baseline = payload.baseline_metrics || {};
+  const winner = payload.validation_winner || {};
+  const winnerMetrics = winner.validation_metrics || winner.metrics || winner;
+  const finalTest = payload.final_test_metrics || null;
+  const perFault = (Array.isArray(payload.per_fault_metrics)
+    ? payload.per_fault_metrics
+    : Object.entries(payload.per_fault_metrics || {}).map(([fault_type, values]) => ({ fault_type, ...(values || {}) }))).slice(0, 8);
+  const hasExperimentSummary = payload.experiment_status != null
+    || Object.keys(baseline).length > 0
+    || Object.keys(winner).length > 0
+    || finalTest != null
+    || perFault.length > 0;
 
   return (
     <Panel title={text("로컬 데이터 분석", "Local Data Analysis")} icon="database" right={<span className="chip">NOTEBOOK / PY</span>}>
       {state.loading && <div className="process-list-empty">{text("분석 결과를 확인하는 중…", "Checking analysis output…")}</div>}
-      {state.error && <div className="source-notice is-demo"><Icon name="alert" size={13} />{state.error}</div>}
+      {state.error && <div className="source-notice is-demo"><Icon name="alert" size={13} />{text("로컬 분석 결과를 불러오지 못했습니다.", "Could not load local analysis results.")}</div>}
       {!state.loading && !state.error && !ready && (
         <div className="source-notice is-demo"><Icon name="info" size={13} />{text("아직 결과가 없습니다. notebooks/fab_local_analysis.ipynb 또는 run_fab_analysis.py를 실행하세요.", "No result yet. Run notebooks/fab_local_analysis.ipynb or run_fab_analysis.py.")}</div>
       )}
@@ -72,6 +98,55 @@ function LocalAnalysisPanel() {
             <div><span>{text("결측 / 중복", "Missing / Duplicates")}</span><strong className="mono">{payload.dataset?.missing_cells ?? 0} / {payload.dataset?.duplicate_rows ?? 0}</strong></div>
             <div><span>{text("분석 방식", "Analysis Mode")}</span><strong>{String(metrics.mode || "—").replaceAll("_", " ")}</strong></div>
           </div>
+          {hasExperimentSummary && (
+            <div className="experiment-summary-grid">
+              <section>
+                <h4>{text("Workbench 상태", "Workbench Status")}</h4>
+                <strong>{experimentStatusLabel(payload.experiment_status)}</strong>
+                <small>{text("기본 상태에서는 학습/최종 Test/Candidate 생성을 실행하지 않습니다.", "Training, final test, and candidate creation remain off by default.")}</small>
+              </section>
+              {Object.keys(baseline).length > 0 && (
+                <section>
+                  <h4>{text("Production Baseline", "Production Baseline")}</h4>
+                  <div><span>Precision</span><b className="mono">{metricValue(baseline, "precision")}</b></div>
+                  <div><span>Recall / F2</span><b className="mono">{metricValue(baseline, "recall")} / {metricValue(baseline, "f2")}</b></div>
+                  <div><span>FPR</span><b className="mono">{metricValue(baseline, "false_positive_rate", "fpr")}</b></div>
+                </section>
+              )}
+              {Object.keys(winner).length > 0 && (
+                <section>
+                  <h4>{text("Validation Winner", "Validation Winner")}</h4>
+                  <strong>{winner.model || winner.model_name || "—"}</strong>
+                  <small>{winner.feature_set || winner.feature_set_name || "—"}</small>
+                  <div><span>F2 / Threshold</span><b className="mono">{metricValue(winnerMetrics, "f2")} / {metricValue(winner, "threshold")}</b></div>
+                </section>
+              )}
+              {finalTest && Object.keys(finalTest).length > 0 && (
+                <section>
+                  <h4>{text("Final Test · 봉인 결과", "Final Test · Sealed")}</h4>
+                  <div><span>Precision / Recall</span><b className="mono">{metricValue(finalTest, "precision")} / {metricValue(finalTest, "recall")}</b></div>
+                  <div><span>F1 / F2</span><b className="mono">{metricValue(finalTest, "f1")} / {metricValue(finalTest, "f2")}</b></div>
+                  <div><span>FPR</span><b className="mono">{metricValue(finalTest, "false_positive_rate", "fpr")}</b></div>
+                </section>
+              )}
+            </div>
+          )}
+          {perFault.length > 0 && (
+            <section className="analysis-fault-summary">
+              <h4>{text("Fault별 성능 요약", "Per-fault Performance")}</h4>
+              <div>
+                {perFault.map((item, index) => (
+                  <div key={item.fault_type || item.fault || index}>
+                    <strong>{String(item.fault_type || item.fault || `fault-${index + 1}`).replaceAll("_", " ")}</strong>
+                    <span className="mono">n={item.support ?? "—"}</span>
+                    <span className="mono">Recall {metricValue(item, "recall")}</span>
+                    <span className="mono">F2 {metricValue(item, "f2")}</span>
+                    <span className="mono">Delay {item.detection_delay ?? item.detection_delay_seconds ?? "—"}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <div className="analysis-grid">
             <section>
               <h4>Feature Importance</h4>
