@@ -1,8 +1,8 @@
-"""Local FAB dataset analysis shared by notebooks, CLI, API, and pipelines.
+"""FAB dataset loading, export, EDA output, and dashboard compatibility.
 
-The notebook is intentionally a thin client.  All reusable loading, profiling,
-feature-importance, artifact, and dashboard-summary logic lives here so a
-scheduled Python pipeline can replace Jupyter without changing contracts.
+The leakage-safe workbench lives in :mod:`app.services.fab_experiment`.
+Model-fitting helpers retained in this module are explicit legacy compatibility
+APIs and are not called by the default notebook or CLI path.
 """
 from __future__ import annotations
 
@@ -38,8 +38,12 @@ DATA_ROOT = ROOT_DIR / "data"
 DATA_INPUT_DIR = DATA_ROOT / "input"
 DATA_OUTPUT_DIR = DATA_ROOT / "output"
 DEFAULT_INPUT_PATH = DATA_INPUT_DIR / "fab_training.csv"
-DASHBOARD_SUMMARY_PATH = DATA_OUTPUT_DIR / "dashboard_summary.json"
+FAB_ANALYSIS_OUTPUT_DIR = DATA_OUTPUT_DIR / "fab_analysis"
+DASHBOARD_SUMMARY_PATH = FAB_ANALYSIS_OUTPUT_DIR / "dashboard_summary.json"
+LEGACY_DASHBOARD_SUMMARY_PATH = DATA_OUTPUT_DIR / "dashboard_summary.json"
 SUPPORTED_SUFFIXES = {".csv", ".parquet"}
+GROUND_TRUTH_COLUMN = "ground_truth_is_anomaly"
+BASELINE_PREDICTION_COLUMN = "baseline_detector_is_anomaly"
 IDENTITY_COLUMNS = {
     "message_id",
     "process_run_id",
@@ -53,6 +57,15 @@ IDENTITY_COLUMNS = {
     "feature_contract",
     "feature_fingerprint",
     "config_fingerprint",
+    BASELINE_PREDICTION_COLUMN,
+    GROUND_TRUTH_COLUMN,
+    "ground_truth_fault_type",
+    "ground_truth_tags",
+    "ground_truth_defect",
+    "ground_truth_started_at",
+    "ground_truth_source",
+    "baseline_prediction_source",
+    "synthetic_seed",
 }
 
 
@@ -115,28 +128,59 @@ def export_runtime_features(
         required = {"message_id", "process_run_id", "process_id", "machine_state", "detector_context_json"}
         if not required.issubset(columns):
             raise RuntimeError("process_telemetry has no FAB v2 detector context; run the FAB stream first")
+        source_column = ", t.source AS source" if "source" in columns else ""
+        lot_columns = set(db.table_columns(conn, "lots"))
+        lot_join = " LEFT JOIN lots l ON l.lot_id = t.lot_id" if "metadata_json" in lot_columns else ""
+        lot_metadata_column = (
+            ", l.metadata_json AS lot_metadata_json"
+            if "metadata_json" in lot_columns
+            else ""
+        )
         rows = conn.execute(
-            "SELECT message_id, process_run_id, process_id, lot_id, wafer_id, equipment_id, "
-            "unit_id, recipe_id, observed_at, detector_context_json "
-            "FROM process_telemetry WHERE LOWER(process_id) = LOWER(?) "
-            "AND UPPER(machine_state) = 'RUNNING' ORDER BY observed_at, message_id",
+            "SELECT t.message_id, t.process_run_id, t.process_id, t.lot_id, t.wafer_id, "
+            "t.equipment_id, t.unit_id, t.recipe_id, t.observed_at, "
+            f"t.detector_context_json{source_column}{lot_metadata_column} "
+            f"FROM process_telemetry t{lot_join} WHERE LOWER(t.process_id) = LOWER(?) "
+            "AND UPPER(t.machine_state) = 'RUNNING' ORDER BY t.observed_at, t.message_id",
             (normalized_process,),
         ).fetchall()
         detection_columns = set(db.table_columns(conn, "fab_detector_results"))
-        labels: dict[str, bool] = {}
+        baseline_predictions: dict[str, bool] = {}
         if {"message_id", "modality", "is_anomaly"}.issubset(detection_columns):
             label_rows = conn.execute(
                 "SELECT message_id, is_anomaly FROM fab_detector_results "
                 "WHERE LOWER(process_id) = LOWER(?) AND modality = 'timeseries'",
                 (normalized_process,),
             ).fetchall()
-            labels = {str(dict(row)["message_id"]): bool(dict(row)["is_anomaly"]) for row in label_rows}
+            baseline_predictions = {
+                str(dict(row)["message_id"]): bool(dict(row)["is_anomaly"])
+                for row in label_rows
+            }
+        fault_columns = set(db.table_columns(conn, "simulation_faults"))
+        faults_by_run: dict[str, list[dict[str, Any]]] = {}
+        required_fault_columns = {
+            "process_run_id",
+            "fault_type",
+            "started_at",
+            "ground_truth_tags_json",
+            "ground_truth_defect",
+            "metadata_json",
+        }
+        if required_fault_columns.issubset(fault_columns):
+            fault_rows = conn.execute(
+                "SELECT process_run_id, fault_type, started_at, ground_truth_tags_json, "
+                "ground_truth_defect, metadata_json FROM simulation_faults ORDER BY started_at, fault_id"
+            ).fetchall()
+            for fault_row in fault_rows:
+                decoded = dict(fault_row)
+                faults_by_run.setdefault(str(decoded["process_run_id"]), []).append(decoded)
 
     records: list[dict[str, Any]] = []
     expected_names: list[str] | None = None
     for row in rows:
         item = dict(row)
         context = _decode_json(item.pop("detector_context_json", None))
+        lot_metadata = _decode_json(item.pop("lot_metadata_json", None))
         names = [str(name) for name in context.get("feature_names") or []]
         vector = list(context.get("feature_vector") or [])
         if not names or len(names) != len(vector):
@@ -145,12 +189,53 @@ def export_runtime_features(
             expected_names = names
         if names != expected_names:
             raise ValueError("Persisted runtime rows contain multiple feature contracts")
+        run_faults = faults_by_run.get(str(item.get("process_run_id")), [])
+        synthetic_provenance = bool(context.get("generator_version")) or str(
+            item.get("source") or ""
+        ).lower() in {"virtual_fab_v2", "fab_direct", "fab_transport"}
+        fault_types = list(dict.fromkeys(str(fault["fault_type"]) for fault in run_faults))
+        ground_truth_tags: list[str] = []
+        ground_truth_defects: list[str] = []
+        synthetic_seed: Any = lot_metadata.get("synthetic_seed")
+        for fault in run_faults:
+            tags = _decode_json(fault.get("ground_truth_tags_json"))
+            if not tags:
+                try:
+                    parsed_tags = json.loads(str(fault.get("ground_truth_tags_json") or "[]"))
+                except (TypeError, ValueError):
+                    parsed_tags = []
+                if isinstance(parsed_tags, list):
+                    ground_truth_tags.extend(map(str, parsed_tags))
+            else:
+                ground_truth_tags.extend(map(str, tags))
+            if fault.get("ground_truth_defect"):
+                ground_truth_defects.append(str(fault["ground_truth_defect"]))
+            metadata = _decode_json(fault.get("metadata_json"))
+            if synthetic_seed is None:
+                synthetic_seed = metadata.get("synthetic_seed")
         record = {
             **{key: item.get(key) for key in item},
             "feature_contract": context.get("feature_contract"),
             "feature_fingerprint": context.get("feature_fingerprint"),
             "config_fingerprint": context.get("config_fingerprint"),
-            "is_anomaly": labels.get(str(item.get("message_id")), False),
+            BASELINE_PREDICTION_COLUMN: baseline_predictions.get(str(item.get("message_id"))),
+            GROUND_TRUTH_COLUMN: True if run_faults else (False if synthetic_provenance else None),
+            "ground_truth_fault_type": "|".join(fault_types) if fault_types else None,
+            "ground_truth_tags": json.dumps(
+                list(dict.fromkeys(ground_truth_tags)), ensure_ascii=False
+            ),
+            "ground_truth_defect": "|".join(dict.fromkeys(ground_truth_defects)) or None,
+            "ground_truth_started_at": min(
+                (str(fault["started_at"]) for fault in run_faults),
+                default=None,
+            ),
+            "ground_truth_source": "simulation_faults" if synthetic_provenance or run_faults else None,
+            "baseline_prediction_source": (
+                "fab_detector_results"
+                if str(item.get("message_id")) in baseline_predictions
+                else None
+            ),
+            "synthetic_seed": synthetic_seed,
         }
         record.update({name: float(value) for name, value in zip(names, vector, strict=True)})
         records.append(record)
@@ -241,10 +326,11 @@ def _as_binary_target(series: pd.Series) -> pd.Series:
 def feature_importance_analysis(
     frame: pd.DataFrame,
     *,
-    target_column: str | None = "is_anomaly",
+    target_column: str | None = GROUND_TRUTH_COLUMN,
     feature_columns: Sequence[str] | None = None,
     random_state: int = 42,
 ) -> dict[str, Any]:
+    """Legacy opt-in model-based importance helper; this function fits models."""
     features = _feature_frame(frame, target_column=target_column, feature_columns=feature_columns)
     metrics: dict[str, Any]
     model: Any
@@ -347,12 +433,16 @@ def build_candidate_bundle(
     *,
     process_id: str,
     feature_columns: Sequence[str],
-    target_column: str | None = "is_anomaly",
+    target_column: str | None = GROUND_TRUTH_COLUMN,
     contamination: float = 0.05,
     version: str | None = None,
     random_state: int = 42,
 ) -> tuple[dict[str, Any], dict[str, float]]:
-    """Build a registerable bundle only from exact persisted runtime features."""
+    """Legacy opt-in Isolation Forest builder for exact runtime features.
+
+    New workbench experiments should use ``fab_experiment`` so threshold and
+    feature/model selection remain Validation-only.
+    """
     normalized_process = str(process_id).strip().lower()
     if not 0.001 <= float(contamination) <= 0.4:
         raise ValueError("contamination must be between 0.001 and 0.4")
@@ -499,13 +589,14 @@ def run_local_analysis(
     input_path: str | Path = DEFAULT_INPUT_PATH,
     *,
     process_id: str = "cmp",
-    target_column: str | None = "is_anomaly",
+    target_column: str | None = GROUND_TRUTH_COLUMN,
     feature_columns: Sequence[str] | None = None,
     output_dir: str | Path = DATA_OUTPUT_DIR,
     create_candidate: bool = False,
     contamination: float = 0.05,
     random_state: int = 42,
 ) -> dict[str, Any]:
+    """Legacy opt-in EDA/model workflow kept for API compatibility."""
     frame = load_local_dataset(input_path)
     analysis = feature_importance_analysis(
         frame,
@@ -536,8 +627,65 @@ def run_local_analysis(
     )
 
 
-def latest_dashboard_summary(path: str | Path = DASHBOARD_SUMMARY_PATH) -> dict[str, Any]:
-    source = Path(path).resolve()
+def build_workbench_dashboard_summary(
+    *,
+    process_id: str,
+    dataset: Mapping[str, Any],
+    baseline_metrics: Mapping[str, Any] | None,
+    validation_winner: Mapping[str, Any] | None,
+    final_test_metrics: Mapping[str, Any] | None,
+    per_fault_metrics: Sequence[Mapping[str, Any]] = (),
+    existing_summary: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Extend the existing AI Analysis contract without removing legacy keys."""
+    summary = dict(existing_summary or {})
+    model = dict(summary.get("model") or {})
+    model.setdefault("metrics", {})
+    summary.update(
+        {
+            "schema_version": ANALYSIS_SCHEMA_VERSION,
+            "status": "ready",
+            "generated_at": utc_now(),
+            "process_id": str(process_id).strip().lower(),
+            "dataset": _jsonable(dataset),
+            "model": model,
+            "baseline_metrics": _jsonable(baseline_metrics or {}),
+            "validation_winner": _jsonable(validation_winner or {}),
+            "final_test_metrics": _jsonable(final_test_metrics or {}),
+            "per_fault_metrics": _jsonable(list(per_fault_metrics)),
+            "experiment_status": "validated" if validation_winner else "not_run",
+        }
+    )
+    summary.setdefault("feature_importance", [])
+    summary.setdefault("top_correlations", [])
+    summary.setdefault("artifacts", {})
+    return summary
+
+
+def save_workbench_dashboard_summary(
+    summary: Mapping[str, Any],
+    path: str | Path = DASHBOARD_SUMMARY_PATH,
+) -> Path:
+    if summary.get("schema_version") != ANALYSIS_SCHEMA_VERSION:
+        raise ValueError("Workbench dashboard summary must use fab-analysis.v1")
+    destination = Path(path).resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(_jsonable(summary), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary.replace(destination)
+    return destination
+
+
+def latest_dashboard_summary(path: str | Path | None = None) -> dict[str, Any]:
+    if path is None:
+        preferred = DASHBOARD_SUMMARY_PATH.resolve()
+        legacy = LEGACY_DASHBOARD_SUMMARY_PATH.resolve()
+        source = preferred if preferred.is_file() or not legacy.is_file() else legacy
+    else:
+        source = Path(path).resolve()
     if not source.is_file():
         return {
             "schema_version": ANALYSIS_SCHEMA_VERSION,

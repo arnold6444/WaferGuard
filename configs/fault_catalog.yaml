@@ -26,6 +26,7 @@ faults:
     quality_effects:
       etch_depth_nm: -7.0
       sidewall_angle_deg: -1.8
+      post_etch_linewidth_nm: 2.2
     vision: {defect: residue, base_probability: 0.20, max_probability: 0.90}
 
   deposition_precursor_instability:

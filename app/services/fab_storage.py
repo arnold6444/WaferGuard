@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any
 
 from app.services import db
@@ -56,6 +57,116 @@ def normalize_timestamp(value: Any | None, *, default_now: bool = True) -> str |
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+@lru_cache(maxsize=1)
+def _public_fab_config() -> dict[str, Any]:
+    from app.services.fab_generator import load_fab_config  # noqa: PLC0415
+
+    return load_fab_config()
+
+
+def process_definitions(process_id: str | None = None) -> list[dict[str, Any]]:
+    """Return the public, vendor-neutral FAB equipment and measurement catalog."""
+    configured = _public_fab_config()["processes"]
+    selected = str(process_id).lower() if process_id else None
+    definitions: list[dict[str, Any]] = []
+    for current_id, process in configured.items():
+        if selected and current_id != selected:
+            continue
+        metrology_plan = [
+            {
+                "metric_id": metric_id,
+                **{
+                    key: spec[key]
+                    for key in (
+                        "display_name", "unit", "modality", "instrument_class",
+                        "method", "sampling_level", "target", "tolerance",
+                    )
+                },
+            }
+            for metric_id, spec in process["metrology"].items()
+        ]
+        definitions.append({
+            "process_id": current_id,
+            "display_name": process["display_name"],
+            "process_step": process["process_step"],
+            "equipment_class": dict(process["equipment_class"]),
+            "unit_type": process["unit_type"],
+            "unit_class": process["unit_class"],
+            "sensor_tags": {key: dict(value) for key, value in process["sensor_tags"].items()},
+            "equipment": [
+                {
+                    "equipment_id": tool["id"],
+                    "display_name": tool["display_name"],
+                    "equipment_class_id": tool["equipment_class_id"],
+                    "units": [
+                        {
+                            "unit_id": unit["id"],
+                            "display_name": unit["display_name"],
+                            "unit_class": unit["unit_class"],
+                        }
+                        for unit in tool["units"]
+                    ],
+                }
+                for tool in process["equipment"]
+            ],
+            "recipes": [
+                {
+                    "recipe_id": recipe["id"],
+                    "display_name": recipe["display_name"],
+                    "recipe_class": recipe["recipe_class"],
+                }
+                for recipe in process["recipes"]
+            ],
+            "metrology_plan": metrology_plan,
+            "inspection_plan": dict(process["inspection"]),
+            "runtime_supported": True,
+            "synthetic_proxy": True,
+            "disclaimer": "Vendor-neutral synthetic configuration; not equipment or metrology control data.",
+        })
+    return definitions
+
+
+def _configured_context(
+    process_id: str | None,
+    *,
+    equipment_id: str | None = None,
+    unit_id: str | None = None,
+    recipe_id: str | None = None,
+) -> dict[str, Any]:
+    definitions = process_definitions(process_id)
+    if not definitions:
+        return {}
+    definition = definitions[0]
+    equipment = next(
+        (item for item in definition["equipment"] if item["equipment_id"] == equipment_id),
+        None,
+    )
+    unit = next(
+        (item for item in (equipment or {}).get("units", []) if item["unit_id"] == unit_id),
+        None,
+    )
+    recipe = next(
+        (item for item in definition["recipes"] if item["recipe_id"] == recipe_id),
+        None,
+    )
+    return {
+        "process_id": definition["process_id"],
+        "equipment_class": definition["equipment_class"],
+        "equipment_display_name": (equipment or {}).get("display_name", equipment_id),
+        "unit_class": (unit or {}).get("unit_class", definition["unit_class"]),
+        "unit_display_name": (unit or {}).get("display_name", unit_id),
+        "recipe_class": (recipe or {}).get("recipe_class"),
+        "recipe_display_name": (recipe or {}).get("display_name", recipe_id),
+        "sensor_tags": definition["sensor_tags"],
+        "supported_recipes": definition["recipes"],
+        "metrology_plan": definition["metrology_plan"],
+        "inspection_plan": definition["inspection_plan"],
+        "runtime_supported": True,
+        "synthetic_proxy": True,
+        "disclaimer": definition["disclaimer"],
+    }
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -294,6 +405,8 @@ def init_fab_db() -> None:
                 available_at TEXT NOT NULL,
                 metrics_json TEXT NOT NULL,
                 quality_targets_json TEXT NOT NULL DEFAULT '{}',
+                measurements_json TEXT NOT NULL DEFAULT '[]',
+                metrology_context_json TEXT NOT NULL DEFAULT '{}',
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
@@ -325,6 +438,11 @@ def init_fab_db() -> None:
                 defect_severity REAL,
                 observed_at TEXT NOT NULL,
                 available_at TEXT NOT NULL,
+                inspection_modality TEXT,
+                instrument_class TEXT,
+                image_type TEXT,
+                sampling_level TEXT,
+                inspection_context_json TEXT NOT NULL DEFAULT '{}',
                 metadata_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
@@ -414,6 +532,27 @@ def init_fab_db() -> None:
                 "ALTER TABLE metrology_results ADD COLUMN quality_targets_json "
                 "TEXT NOT NULL DEFAULT '{}'"
             )
+        metrology_columns = set(db.table_columns(conn, "metrology_results"))
+        if "measurements_json" not in metrology_columns:
+            conn.execute(
+                "ALTER TABLE metrology_results ADD COLUMN measurements_json "
+                "TEXT NOT NULL DEFAULT '[]'"
+            )
+        if "metrology_context_json" not in metrology_columns:
+            conn.execute(
+                "ALTER TABLE metrology_results ADD COLUMN metrology_context_json "
+                "TEXT NOT NULL DEFAULT '{}'"
+            )
+        inspection_columns = set(db.table_columns(conn, "inspection_assets"))
+        for column, definition in (
+            ("inspection_modality", "TEXT"),
+            ("instrument_class", "TEXT"),
+            ("image_type", "TEXT"),
+            ("sampling_level", "TEXT"),
+            ("inspection_context_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ):
+            if column not in inspection_columns:
+                conn.execute(f"ALTER TABLE inspection_assets ADD COLUMN {column} {definition}")
         for table in (
             "equipment_units",
             "process_runs",
@@ -428,6 +567,34 @@ def init_fab_db() -> None:
             if "cycle_index" not in columns:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN cycle_index INTEGER")
         _ensure_legacy_identity_columns(conn)
+        # Early FAB v2 state envelopes did not carry an explicit started_at.
+        # Repair only impossible completed ranges, using the first persisted
+        # telemetry timestamp as the non-destructive source of truth.
+        run_rows = conn.execute(
+            "SELECT process_run_id, started_at, completed_at FROM process_runs "
+            "WHERE completed_at IS NOT NULL"
+        ).fetchall()
+        for run_row in run_rows:
+            started_at = normalize_timestamp(run_row["started_at"], default_now=False)
+            completed_at = normalize_timestamp(run_row["completed_at"], default_now=False)
+            if not started_at or not completed_at:
+                continue
+            if datetime.fromisoformat(started_at) <= datetime.fromisoformat(completed_at):
+                continue
+            first_row = conn.execute(
+                "SELECT MIN(observed_at) AS first_observed_at FROM process_telemetry "
+                "WHERE process_run_id = ?",
+                (run_row["process_run_id"],),
+            ).fetchone()
+            first_observed_at = normalize_timestamp(
+                first_row["first_observed_at"] if first_row else None,
+                default_now=False,
+            )
+            if first_observed_at and datetime.fromisoformat(first_observed_at) <= datetime.fromisoformat(completed_at):
+                conn.execute(
+                    "UPDATE process_runs SET started_at = ? WHERE process_run_id = ?",
+                    (first_observed_at, run_row["process_run_id"]),
+                )
 
 
 _LEGACY_IDENTITY_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
@@ -560,7 +727,24 @@ def upsert_equipment_unit(value: Any) -> dict[str, Any]:
     unit_id = _required(payload, "unit_id")
     existing = get_equipment_unit(equipment_id, unit_id)
     now = normalize_timestamp(payload.get("updated_at"))
-    metadata = dict((existing or {}).get("metadata", {}))
+    process_id = str(
+        payload.get("process_id")
+        or (existing or {}).get("process_id")
+        or payload.get("process_step")
+        or (existing or {}).get("process_step")
+        or "unknown"
+    ).lower()
+    process_step = str(
+        payload.get("process_step") or (existing or {}).get("process_step") or "unknown"
+    )
+    recipe_id = payload.get("recipe_id", (existing or {}).get("recipe_id"))
+    metadata = _configured_context(
+        process_id,
+        equipment_id=equipment_id,
+        unit_id=unit_id,
+        recipe_id=str(recipe_id) if recipe_id else None,
+    )
+    metadata.update(dict((existing or {}).get("metadata", {})))
     incoming_metadata = payload.get("metadata", payload.get("metadata_json"))
     if incoming_metadata is not None:
         decoded = _decode_json(incoming_metadata, {})
@@ -570,17 +754,11 @@ def upsert_equipment_unit(value: Any) -> dict[str, Any]:
     record = {
         "equipment_id": equipment_id,
         "unit_id": unit_id,
-        "process_id": str(
-            payload.get("process_id")
-            or (existing or {}).get("process_id")
-            or payload.get("process_step")
-            or (existing or {}).get("process_step")
-            or "unknown"
-        ).lower(),
-        "process_step": str(payload.get("process_step") or (existing or {}).get("process_step") or "unknown"),
+        "process_id": process_id,
+        "process_step": process_step,
         "unit_type": str(payload.get("unit_type") or (existing or {}).get("unit_type") or "unit"),
         "status": str(payload.get("status") or (existing or {}).get("status") or "available"),
-        "recipe_id": payload.get("recipe_id", (existing or {}).get("recipe_id")),
+        "recipe_id": recipe_id,
         "current_lot_id": payload.get("lot_id", payload.get("current_lot_id", (existing or {}).get("current_lot_id"))),
         "current_wafer_id": payload.get("wafer_id", payload.get("current_wafer_id", (existing or {}).get("current_wafer_id"))),
         "current_process_run_id": payload.get("process_run_id", payload.get("current_process_run_id", (existing or {}).get("current_process_run_id"))),
@@ -618,7 +796,23 @@ def upsert_process_run(value: Any) -> dict[str, Any]:
         raise ValueError("process_run_id is required")
     existing = get_process_run(process_run_id)
     now = normalize_timestamp(payload.get("updated_at"))
-    metadata = dict((existing or {}).get("metadata", {}))
+    process_id = str(
+        payload.get("process_id")
+        or (existing or {}).get("process_id")
+        or payload.get("process_step")
+        or (existing or {}).get("process_step")
+        or ""
+    ).lower()
+    equipment_id = str(payload.get("equipment_id") or (existing or {}).get("equipment_id") or "")
+    unit_id = str(payload.get("unit_id") or (existing or {}).get("unit_id") or "")
+    recipe_id = str(payload.get("recipe_id") or (existing or {}).get("recipe_id") or "")
+    metadata = _configured_context(
+        process_id,
+        equipment_id=equipment_id or None,
+        unit_id=unit_id or None,
+        recipe_id=recipe_id or None,
+    )
+    metadata.update(dict((existing or {}).get("metadata", {})))
     incoming_metadata = payload.get("metadata", payload.get("metadata_json"))
     if incoming_metadata is not None:
         decoded = _decode_json(incoming_metadata, {})
@@ -628,27 +822,27 @@ def upsert_process_run(value: Any) -> dict[str, Any]:
     completed_at = normalize_timestamp(payload.get("completed_at"), default_now=False)
     if completed_at is None:
         completed_at = (existing or {}).get("completed_at")
+    observed_at = normalize_timestamp(payload.get("observed_at"), default_now=False)
     record = {
         "process_run_id": process_run_id,
         "schema_version": str(payload.get("schema_version") or (existing or {}).get("schema_version") or FAB_SCHEMA_VERSION),
         "lot_id": str(payload.get("lot_id") or (existing or {}).get("lot_id") or ""),
         "wafer_id": str(payload.get("wafer_id") or (existing or {}).get("wafer_id") or ""),
-        "process_id": str(
-            payload.get("process_id")
-            or (existing or {}).get("process_id")
-            or payload.get("process_step")
-            or (existing or {}).get("process_step")
-            or ""
-        ).lower(),
+        "process_id": process_id,
         "process_step": str(payload.get("process_step") or (existing or {}).get("process_step") or ""),
-        "equipment_id": str(payload.get("equipment_id") or (existing or {}).get("equipment_id") or ""),
-        "unit_id": str(payload.get("unit_id") or (existing or {}).get("unit_id") or ""),
+        "equipment_id": equipment_id,
+        "unit_id": unit_id,
         "unit_type": str(payload.get("unit_type") or (existing or {}).get("unit_type") or "unit"),
-        "recipe_id": str(payload.get("recipe_id") or (existing or {}).get("recipe_id") or ""),
+        "recipe_id": recipe_id,
         "cycle_id": str(payload.get("cycle_id") or (existing or {}).get("cycle_id") or process_run_id),
         "cycle_index": int(payload.get("cycle_index", (existing or {}).get("cycle_index", payload.get("cycle_index_since_maintenance", 0)))),
         "cycle_index_since_maintenance": int(payload.get("cycle_index_since_maintenance", (existing or {}).get("cycle_index_since_maintenance", 0))),
-        "started_at": str(normalize_timestamp(payload.get("started_at"), default_now=False) or (existing or {}).get("started_at") or now),
+        "started_at": str(
+            normalize_timestamp(payload.get("started_at"), default_now=False)
+            or (existing or {}).get("started_at")
+            or observed_at
+            or now
+        ),
         "completed_at": completed_at,
         "status": str(payload.get("status") or (existing or {}).get("status") or "running"),
         "metadata_json": _json(metadata, {}),
@@ -800,6 +994,17 @@ def insert_metrology_result(value: Any) -> dict[str, Any]:
             )),
             {},
         ),
+        "measurements_json": _json(
+            _sanitize_public(payload.get("measurements", payload.get("measurements_json", []))),
+            [],
+        ),
+        "metrology_context_json": _json(
+            _sanitize_public(payload.get(
+                "metrology_context",
+                payload.get("metrology_context_json", {}),
+            )),
+            {},
+        ),
         "status": str(payload.get("status") or "available"),
         "created_at": normalize_timestamp(payload.get("created_at")),
     }
@@ -810,7 +1015,9 @@ def insert_metrology_result(value: Any) -> dict[str, Any]:
         ).fetchone()
     result = _decode_result(
         row or record,
-        json_fields=("related_tags", "metrics", "quality_targets"),
+        json_fields=(
+            "related_tags", "metrics", "quality_targets", "measurements", "metrology_context",
+        ),
     )
     result["deduplicated"] = not inserted
     return result
@@ -847,6 +1054,17 @@ def insert_inspection_asset(value: Any) -> dict[str, Any]:
         "defect_severity": float(payload["defect_severity"]) if payload.get("defect_severity") is not None else None,
         "observed_at": observed_at,
         "available_at": available_at,
+        "inspection_modality": payload.get("inspection_modality"),
+        "instrument_class": payload.get("instrument_class"),
+        "image_type": payload.get("image_type"),
+        "sampling_level": payload.get("sampling_level"),
+        "inspection_context_json": _json(
+            _sanitize_public(payload.get(
+                "inspection_context",
+                payload.get("inspection_context_json", {}),
+            )),
+            {},
+        ),
         "metadata_json": _json(_sanitize_public(payload.get("metadata", payload.get("metadata_json", {}))), {}),
         "created_at": normalize_timestamp(payload.get("created_at")),
     }
@@ -863,7 +1081,8 @@ def insert_inspection_asset(value: Any) -> dict[str, Any]:
 def _decode_result(row: Any, *, json_fields: tuple[str, ...]) -> dict[str, Any]:
     item = _row(row) if hasattr(row, "keys") else dict(row)
     for field in json_fields:
-        item[field] = _decode_json(item.pop(f"{field}_json", None), [] if field == "related_tags" else {})
+        default = [] if field in {"related_tags", "measurements"} else {}
+        item[field] = _decode_json(item.pop(f"{field}_json", None), default)
     if item.get("is_anomaly") is not None:
         item["is_anomaly"] = bool(item["is_anomaly"])
     return _sanitize_public(item)
@@ -887,6 +1106,7 @@ def _decode_inspection_asset(row: Any, *, include_debug: bool) -> dict[str, Any]
     item = _row(row) if hasattr(row, "keys") else dict(row)
     item["bbox"] = _decode_json(item.pop("bbox_json", None), None)
     item["related_tags"] = _decode_json(item.pop("related_tags_json", None), [])
+    item["inspection_context"] = _decode_json(item.pop("inspection_context_json", None), {})
     item["metadata"] = _decode_json(item.pop("metadata_json", None), {})
     if item.get("is_anomaly") is not None:
         item["is_anomaly"] = bool(item["is_anomaly"])
@@ -1179,6 +1399,8 @@ def persist_envelope(value: Any) -> dict[str, Any]:
                 combined[field] = detector[field]
     if message_type == "metrology":
         combined["metrics"] = payload.get("metrics", {})
+        combined["measurements"] = payload.get("measurements", [])
+        combined["metrology_context"] = payload.get("metrology_context", {})
         combined["related_tags"] = combined.get("related_tags", payload.get("related_tags", []))
         return insert_metrology_result(combined)
     if message_type == "inspection":
@@ -1186,9 +1408,16 @@ def persist_envelope(value: Any) -> dict[str, Any]:
         if isinstance(synthetic_debug, Mapping):
             combined["mask_key"] = synthetic_debug.get("mask_key")
             combined["bbox"] = synthetic_debug.get("bbox", payload.get("bbox"))
+        supplied_metadata = _decode_json(payload.get("metadata"), {})
+        if not isinstance(supplied_metadata, dict):
+            raise ValueError("inspection metadata must be an object")
         combined["metadata"] = {
-            "features": payload.get("features"),
-            "generator_version": payload.get("generator_version"),
+            **supplied_metadata,
+            **{
+                key: payload[key]
+                for key in ("features", "generator_version")
+                if payload.get(key) is not None
+            },
         }
         return insert_inspection_asset(combined)
     raise ValueError(f"Unsupported FAB message_type: {message_type!r}")
@@ -1357,7 +1586,9 @@ def _metrology_for_run(process_run_id: str) -> list[dict[str, Any]]:
     return [
         _decode_result(
             row,
-            json_fields=("related_tags", "metrics", "quality_targets"),
+            json_fields=(
+                "related_tags", "metrics", "quality_targets", "measurements", "metrology_context",
+            ),
         )
         for row in rows
     ]
@@ -1530,8 +1761,19 @@ def process_run_detail(
     run = get_process_run(process_run_id)
     if run is None:
         return None
+    equipment_context = _configured_context(
+        str(run.get("process_id") or run.get("process_step") or "").lower(),
+        equipment_id=str(run.get("equipment_id") or "") or None,
+        unit_id=str(run.get("unit_id") or "") or None,
+        recipe_id=str(run.get("recipe_id") or "") or None,
+    )
     result = {
         **run,
+        "equipment_context": equipment_context,
+        "post_process_plan": {
+            "metrology": equipment_context.get("metrology_plan", []),
+            "inspection": equipment_context.get("inspection_plan", {}),
+        },
         "telemetry": _telemetry_for_run(process_run_id, limit=telemetry_limit),
         "detections": _runtime_detections(process_run_id=process_run_id, limit=telemetry_limit),
         "metrology": _metrology_for_run(process_run_id),
@@ -1660,12 +1902,74 @@ def equipment_overview(process_step: str | None = None) -> list[dict[str, Any]]:
             params,
         ).fetchall()
     items: list[dict[str, Any]] = []
+    runtime_keys: set[tuple[str, str]] = set()
     for row in rows:
         item = _row(row)
         item["metadata"] = _decode_json(item.pop("metadata_json", None), {})
+        process_id = str(item.get("process_id") or item.get("process_step") or "").lower()
+        context = _configured_context(
+            process_id,
+            equipment_id=str(item.get("equipment_id") or "") or None,
+            unit_id=str(item.get("unit_id") or "") or None,
+            recipe_id=str(item.get("recipe_id") or "") or None,
+        )
+        runtime_keys.add((str(item["equipment_id"]), str(item["unit_id"])))
+        item.update({
+            "equipment_context": context,
+            "equipment_class": context.get("equipment_class"),
+            "unit_class": context.get("unit_class"),
+            "recipe_class": context.get("recipe_class"),
+            "sensor_tags": context.get("sensor_tags", {}),
+            "metrology_plan": context.get("metrology_plan", []),
+            "inspection_plan": context.get("inspection_plan", {}),
+            "runtime_supported": bool(context.get("runtime_supported")),
+            "has_runtime_data": True,
+        })
         item["connected"] = True
         item["connection"] = "runtime"
         items.append(item)
+
+    for definition in process_definitions(process_step):
+        for equipment in definition["equipment"]:
+            for unit in equipment["units"]:
+                key = (str(equipment["equipment_id"]), str(unit["unit_id"]))
+                if key in runtime_keys:
+                    continue
+                context = _configured_context(
+                    str(definition["process_id"]),
+                    equipment_id=key[0],
+                    unit_id=key[1],
+                )
+                items.append({
+                    "equipment_id": key[0],
+                    "unit_id": key[1],
+                    "process_id": definition["process_id"],
+                    "process_step": definition["process_step"],
+                    "unit_type": definition["unit_type"],
+                    "status": "not_connected",
+                    "recipe_id": None,
+                    "current_lot_id": None,
+                    "current_wafer_id": None,
+                    "current_process_run_id": None,
+                    "cycle_id": None,
+                    "cycle_index": 0,
+                    "cycle_index_since_maintenance": 0,
+                    "machine_state": "NOT_CONNECTED",
+                    "phase": None,
+                    "last_observed_at": None,
+                    "metadata": context,
+                    "equipment_context": context,
+                    "equipment_class": context.get("equipment_class"),
+                    "unit_class": context.get("unit_class"),
+                    "recipe_class": None,
+                    "sensor_tags": context.get("sensor_tags", {}),
+                    "metrology_plan": context.get("metrology_plan", []),
+                    "inspection_plan": context.get("inspection_plan", {}),
+                    "runtime_supported": True,
+                    "has_runtime_data": False,
+                    "connected": False,
+                    "connection": "configured",
+                })
     return items
 
 
@@ -1684,26 +1988,34 @@ def process_live(
         if value:
             filters.append(f"{field} = ?")
             params.append(value)
-    params.append(safe_limit)
+    inventory = equipment_overview(process_id)
+    run_where = " AND ".join(filters)
     with db.connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM process_telemetry WHERE " + " AND ".join(filters) +
-            " ORDER BY observed_at DESC, id DESC LIMIT ?",
+        active_run_row = conn.execute(
+            "SELECT process_run_id FROM process_runs WHERE " + run_where +
+            " AND LOWER(status) IN ('running', 'processing', 'active') "
+            "ORDER BY started_at DESC, updated_at DESC LIMIT 1",
             tuple(params),
-        ).fetchall()
+        ).fetchone()
+        latest_run_row = active_run_row or conn.execute(
+            "SELECT process_run_id FROM process_runs WHERE " + run_where +
+            " ORDER BY COALESCE(completed_at, started_at) DESC, started_at DESC, updated_at DESC LIMIT 1",
+            tuple(params),
+        ).fetchone()
+        current_run_id = str(latest_run_row["process_run_id"]) if latest_run_row else None
+        if current_run_id:
+            rows = conn.execute(
+                "SELECT * FROM process_telemetry WHERE process_run_id = ? "
+                "ORDER BY observed_at DESC, id DESC LIMIT ?",
+                (current_run_id, safe_limit),
+            ).fetchall()
+        else:
+            rows = []
     telemetry = list(reversed([_decode_telemetry(row) for row in rows]))
-    current_run_id = str(telemetry[-1]["process_run_id"]) if telemetry else None
-    if current_run_id:
-        telemetry = [row for row in telemetry if str(row.get("process_run_id")) == current_run_id]
     detections = _runtime_detections(
-        process_step=process_id,
-        equipment_id=equipment_id,
-        unit_id=unit_id,
-        recipe_id=recipe_id,
+        process_run_id=current_run_id,
         limit=safe_limit,
-    )
-    if current_run_id:
-        detections = [row for row in detections if str(row.get("process_run_id")) == current_run_id]
+    ) if current_run_id else []
     phase_boundaries: list[dict[str, Any]] = []
     prior_phase: str | None = None
     for sample in telemetry:
@@ -1714,18 +2026,40 @@ def process_live(
             )
         prior_phase = phase
     current = telemetry[-1] if telemetry else None
-    current_run = get_process_run(str(current["process_run_id"])) if current else None
+    current_run = get_process_run(current_run_id) if current_run_id else None
     events = _events_for_run(current_run) if current_run else []
+    normalized_status = str((current_run or {}).get("status") or "").lower()
+    run_state = (
+        "running"
+        if normalized_status in {"running", "processing", "active"}
+        else "latest_completed"
+        if normalized_status in {"completed", "complete", "processed"}
+        else "latest_stored"
+        if current_run
+        else "no_run"
+    )
+    runtime_supported = any(bool(item.get("runtime_supported")) for item in inventory)
+    has_runtime_data = bool(current_run or telemetry)
     return {
         "process_id": process_id.lower(),
-        "connected": bool(telemetry or equipment_overview(process_id)),
+        "runtime_supported": runtime_supported,
+        "connected": any(bool(item.get("has_runtime_data")) for item in inventory),
+        "receiving": run_state == "running",
+        "has_runtime_data": has_runtime_data,
+        "run_state": run_state,
         "filters": {"equipment_id": equipment_id, "unit_id": unit_id, "recipe_id": recipe_id},
+        "identity": current or current_run,
+        "process_run": current_run,
         "current": current,
         "telemetry": telemetry,
         "detections": detections,
         "events": events,
         "phase_boundaries": phase_boundaries,
-        "equipment": equipment_overview(process_id),
+        "metrology": _metrology_for_run(current_run_id) if current_run_id else [],
+        "inspections": _inspections_for_run(current_run_id, include_debug=False) if current_run_id else [],
+        "equipment_context": (current_run or {}).get("metadata", {}),
+        "rca": get_rca_result(current_run_id) if current_run_id else None,
+        "equipment": inventory,
         "generated_at": utc_now(),
     }
 

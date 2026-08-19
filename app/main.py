@@ -304,6 +304,12 @@ def fab_equipment(process_id: str | None = None) -> list[dict[str, object]]:
     return fab_storage.equipment_overview(process_id)
 
 
+@app.get("/api/v1/fab/process-definitions")
+def fab_process_definitions(process_id: str | None = None) -> list[dict[str, object]]:
+    """Vendor-neutral synthetic equipment, sensor, and post-process measurement catalog."""
+    return fab_storage.process_definitions(process_id)
+
+
 @app.get("/api/v1/fab/wafers/{wafer_id}/trace")
 def fab_wafer_trace(wafer_id: str, telemetry_limit_per_run: int = 500) -> dict[str, object]:
     result = fab_storage.wafer_trace(

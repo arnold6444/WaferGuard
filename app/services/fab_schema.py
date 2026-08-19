@@ -6,6 +6,7 @@ before a message reaches persistence or inference.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -142,6 +143,77 @@ class FabEventIdentity:
             phase=phase or self.phase,
             phase_progress=self.phase_progress if phase_progress is None else phase_progress,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class FabEquipmentContext:
+    """Public, vendor-neutral equipment and sensor context for one process run."""
+
+    process_id: str
+    equipment_id: str
+    equipment_display_name: str
+    equipment_class: Mapping[str, Any]
+    unit_id: str
+    unit_display_name: str
+    unit_class: str
+    recipe_id: str
+    recipe_display_name: str
+    recipe_class: str
+    sensor_tags: Mapping[str, Mapping[str, Any]]
+
+    def __post_init__(self) -> None:
+        for name in (
+            "process_id", "equipment_id", "equipment_display_name", "unit_id",
+            "unit_display_name", "unit_class", "recipe_id", "recipe_display_name",
+            "recipe_class",
+        ):
+            if not str(getattr(self, name)).strip():
+                raise ValueError(f"FAB equipment context field {name} must not be empty")
+        if not self.equipment_class.get("id") or not self.equipment_class.get("display_name"):
+            raise ValueError("equipment_class requires id and display_name")
+        if not self.sensor_tags:
+            raise ValueError("sensor_tags must not be empty")
+
+    @classmethod
+    def from_config(
+        cls,
+        *,
+        process_id: str,
+        process: Mapping[str, Any],
+        equipment: Mapping[str, Any],
+        unit: Mapping[str, Any],
+        recipe: Mapping[str, Any],
+    ) -> "FabEquipmentContext":
+        return cls(
+            process_id=process_id,
+            equipment_id=str(equipment["id"]),
+            equipment_display_name=str(equipment["display_name"]),
+            equipment_class=copy.deepcopy(dict(process["equipment_class"])),
+            unit_id=str(unit["id"]),
+            unit_display_name=str(unit["display_name"]),
+            unit_class=str(unit["unit_class"]),
+            recipe_id=str(recipe["id"]),
+            recipe_display_name=str(recipe["display_name"]),
+            recipe_class=str(recipe["recipe_class"]),
+            sensor_tags=copy.deepcopy(dict(process["sensor_tags"])),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "process_id": self.process_id,
+            "equipment_id": self.equipment_id,
+            "equipment_display_name": self.equipment_display_name,
+            "equipment_class": copy.deepcopy(dict(self.equipment_class)),
+            "unit_id": self.unit_id,
+            "unit_display_name": self.unit_display_name,
+            "unit_class": self.unit_class,
+            "recipe_id": self.recipe_id,
+            "recipe_display_name": self.recipe_display_name,
+            "recipe_class": self.recipe_class,
+            "sensor_tags": copy.deepcopy(dict(self.sensor_tags)),
+            "synthetic_proxy": True,
+            "disclaimer": "Vendor-neutral synthetic equipment context; not connected to Fab control systems.",
+        }
 
 
 @dataclass(frozen=True, slots=True)

@@ -47,6 +47,10 @@ def _result() -> dict[str, object]:
         ],
         "metrology": {
             "metrics": {"remaining_film_nm": 42.0},
+            "measurements": [{"metric": "remaining_film_nm", "value": 42.0, "unit": "nm"}],
+            "instrument_class": "spectroscopic_reflectometer",
+            "sampling_level": "inline_proxy",
+            "metrology_context": {"measurement_type": "film_thickness"},
             "quality_targets": {
                 "remaining_film_nm": {"target": 42.0, "tolerance": 2.5}
             },
@@ -55,6 +59,11 @@ def _result() -> dict[str, object]:
         "inspection": {
             "image_key": "fab/RUN-1/inspection.png",
             "features": {"mean": 0.5},
+            "inspection_modality": "optical_surface_inspection",
+            "instrument_class": "wafer_surface_scanner",
+            "image_type": "surface_intensity_map",
+            "sampling_level": "inline_proxy",
+            "inspection_context": {"review_role": "surface_defect_screening"},
             "available_at": "2026-08-18T00:10:00+00:00",
             "synthetic_debug": {"mask_key": "secret.png", "bbox": [1, 1, 2, 2]},
         },
@@ -71,6 +80,12 @@ def test_envelopes_keep_identity_and_exclude_simulator_truth() -> None:
     assert "mask_key" not in serialized
     assert "synthetic_debug" not in serialized
     assert [item["message_type"] for item in envelopes].count("telemetry") == 1
+    metrology = next(item for item in envelopes if item["message_type"] == "metrology")
+    inspection = next(item for item in envelopes if item["message_type"] == "inspection")
+    assert metrology["payload"]["instrument_class"] == "spectroscopic_reflectometer"
+    assert metrology["payload"]["measurements"][0]["unit"] == "nm"
+    assert inspection["payload"]["inspection_modality"] == "optical_surface_inspection"
+    assert inspection["payload"]["image_type"] == "surface_intensity_map"
 
 
 def test_cli_defaults_to_mqtt_and_accepts_direct_debug() -> None:

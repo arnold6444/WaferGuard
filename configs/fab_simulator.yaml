@@ -33,6 +33,18 @@ processes:
     process_step: Photo
     legacy_process_step: Lithography
     unit_type: exposure_chamber
+    unit_class: exposure_stage
+    equipment_class:
+      id: arf_immersion_lithography_cell
+      display_name: ArF Immersion Step-and-Scan Lithography Cell
+      category: lithography
+      technology: 193_nm_immersion
+    sensor_tags:
+      exposure_dose: {display_name: Exposure Dose, unit: mJ/cm^2, sensor_type: dose_monitor, role: process_input}
+      focus_offset: {display_name: Focus Offset, unit: um, sensor_type: focus_servo_estimate, role: process_control}
+      track_temperature: {display_name: Track Temperature, unit: degC, sensor_type: temperature_sensor, role: environment}
+      developer_temperature: {display_name: Developer Temperature, unit: degC, sensor_type: temperature_sensor, role: process_input}
+      overlay_nm: {display_name: Overlay Estimate, unit: nm, sensor_type: inline_alignment_estimate, role: derived_indicator}
     samples_per_run: 60
     maintenance_every_cycles: 12
     degradation:
@@ -40,39 +52,75 @@ processes:
       overlay_nm: 0.025
     equipment:
       - id: PHOTO-001
+        display_name: ArF Scanner Cell 1
+        equipment_class_id: arf_immersion_lithography_cell
         bias: {exposure_dose: 0.05, focus_offset: -0.002}
         units:
-          - {id: UNIT-01, bias: {focus_offset: -0.003, overlay_nm: -0.04}}
-          - {id: UNIT-02, bias: {focus_offset: 0.003, overlay_nm: 0.04}}
+          - {id: UNIT-01, display_name: Exposure Stage A, unit_class: exposure_stage, bias: {focus_offset: -0.003, overlay_nm: -0.04}}
+          - {id: UNIT-02, display_name: Exposure Stage B, unit_class: exposure_stage, bias: {focus_offset: 0.003, overlay_nm: 0.04}}
       - id: PHOTO-002
+        display_name: ArF Scanner Cell 2
+        equipment_class_id: arf_immersion_lithography_cell
         bias: {exposure_dose: -0.05, focus_offset: 0.002}
         units:
-          - {id: UNIT-01, bias: {focus_offset: -0.002, overlay_nm: -0.03}}
-          - {id: UNIT-02, bias: {focus_offset: 0.002, overlay_nm: 0.03}}
+          - {id: UNIT-01, display_name: Exposure Stage A, unit_class: exposure_stage, bias: {focus_offset: -0.002, overlay_nm: -0.03}}
+          - {id: UNIT-02, display_name: Exposure Stage B, unit_class: exposure_stage, bias: {focus_offset: 0.002, overlay_nm: 0.03}}
     recipes:
-      - {id: PHOTO_DEMO_A, offsets: {exposure_dose: 0.0, focus_offset: 0.0}}
-      - {id: PHOTO_DEMO_B, offsets: {exposure_dose: 0.18, focus_offset: -0.004}}
+      - {id: PHOTO_DEMO_A, display_name: 193 nm Positive Resist Imaging A, recipe_class: 193_nm_positive_resist_imaging, offsets: {exposure_dose: 0.0, focus_offset: 0.0}}
+      - {id: PHOTO_DEMO_B, display_name: 193 nm Positive Resist Imaging B, recipe_class: 193_nm_positive_resist_imaging, offsets: {exposure_dose: 0.18, focus_offset: -0.004}}
     phases: [idle, coat_track, expose, develop]
     relations:
       - {kind: linear, a: focus_offset, b: overlay_nm, coefficient: 0.45}
       - {kind: correlation, a: track_temperature, b: developer_temperature, coefficient: 0.55}
     metrology:
       critical_dimension_nm:
+        display_name: Post-develop Resist Linewidth
+        unit: nm
+        modality: cd_sem
+        instrument_class: critical_dimension_sem
+        method: top_down_linewidth_measurement
+        sampling_level: inline_sample
         target: 32.0
         tolerance: 1.2
         noise_std: 0.10
         drivers: {focus_offset: 0.75, exposure_dose: -0.20}
       overlay_nm:
+        display_name: Layer-to-layer Overlay
+        unit: nm
+        modality: optical_overlay_metrology
+        instrument_class: optical_overlay_metrology_system
+        method: image_based_overlay_measurement
+        sampling_level: inline_sample
         target: 4.0
         tolerance: 1.0
         noise_std: 0.08
         drivers: {overlay_nm: 0.80, focus_offset: 0.25}
+    inspection:
+      display_name: Post-develop Pattern Inspection
+      inspection_modality: brightfield_optical_pattern_inspection
+      instrument_class: patterned_wafer_optical_inspector
+      image_type: top_down_grayscale_proxy
+      sampling_level: process_run
     vision_related_tags: [focus_offset, exposure_dose, overlay_nm]
 
   etch:
     display_name: Etch
     process_step: Etch
     unit_type: chamber
+    unit_class: vacuum_process_chamber
+    equipment_class:
+      id: icp_rie_etch_system
+      display_name: Inductively Coupled Plasma Reactive Ion Etcher
+      category: plasma_etch
+      technology: dual_rf_icp_rie
+    sensor_tags:
+      chamber_pressure: {display_name: Chamber Pressure, unit: mTorr, sensor_type: capacitance_manometer, role: process_control}
+      source_rf_power: {display_name: Source RF Power, unit: W, sensor_type: rf_forward_power_monitor, role: plasma_source}
+      bias_rf_power: {display_name: Bias RF Power, unit: W, sensor_type: rf_forward_power_monitor, role: ion_energy_control}
+      total_gas_flow: {display_name: Total Process Gas Flow, unit: sccm, sensor_type: mass_flow_controller_aggregate, role: gas_delivery}
+      chamber_temperature: {display_name: Chamber Wall Temperature, unit: degC, sensor_type: temperature_sensor, role: chamber_condition}
+      esc_temperature: {display_name: Electrostatic Chuck Temperature, unit: degC, sensor_type: temperature_sensor, role: wafer_thermal_control}
+      resistance: {display_name: Chamber Resistance Proxy, unit: ohm, sensor_type: derived_synthetic_proxy, role: synthetic_only}
     samples_per_run: 48
     maintenance_every_cycles: 10
     degradation:
@@ -81,39 +129,89 @@ processes:
       resistance: 0.040
     equipment:
       - id: ETCH-001
+        display_name: ICP-RIE Etcher 1
+        equipment_class_id: icp_rie_etch_system
         bias: {chamber_pressure: -0.08, chamber_temperature: -0.12}
         units:
-          - {id: CH-A, bias: {chamber_pressure: -0.05, total_gas_flow: 0.30}}
-          - {id: CH-B, bias: {chamber_pressure: 0.05, total_gas_flow: -0.30}}
+          - {id: CH-A, display_name: Process Chamber A, unit_class: vacuum_process_chamber, bias: {chamber_pressure: -0.05, total_gas_flow: 0.30}}
+          - {id: CH-B, display_name: Process Chamber B, unit_class: vacuum_process_chamber, bias: {chamber_pressure: 0.05, total_gas_flow: -0.30}}
       - id: ETCH-002
+        display_name: ICP-RIE Etcher 2
+        equipment_class_id: icp_rie_etch_system
         bias: {chamber_pressure: 0.08, chamber_temperature: 0.12}
         units:
-          - {id: CH-A, bias: {chamber_pressure: -0.04, total_gas_flow: 0.25}}
-          - {id: CH-B, bias: {chamber_pressure: 0.04, total_gas_flow: -0.25}}
+          - {id: CH-A, display_name: Process Chamber A, unit_class: vacuum_process_chamber, bias: {chamber_pressure: -0.04, total_gas_flow: 0.25}}
+          - {id: CH-B, display_name: Process Chamber B, unit_class: vacuum_process_chamber, bias: {chamber_pressure: 0.04, total_gas_flow: -0.25}}
     recipes:
-      - {id: ETCH_OXIDE_A, offsets: {chamber_pressure: 0.0, source_rf_power: 0.0}}
-      - {id: ETCH_POLY_B, offsets: {chamber_pressure: -0.15, source_rf_power: 6.0}}
+      - {id: ETCH_OXIDE_A, display_name: Fluorocarbon Oxide Etch, recipe_class: fluorocarbon_oxide_etch, offsets: {chamber_pressure: 0.0, source_rf_power: 0.0}}
+      - {id: ETCH_POLY_B, display_name: Halogen Polysilicon Etch, recipe_class: halogen_polysilicon_etch, offsets: {chamber_pressure: -0.15, source_rf_power: 6.0}}
     phases: [pumpdown, plasma_ignite, main_etch, purge]
     relations:
       - {kind: difference, a: chamber_pressure, b: total_gas_flow, coefficient: -0.30}
       - {kind: linear, a: source_rf_power, b: resistance, coefficient: -0.27}
     metrology:
       etch_depth_nm:
+        display_name: Etch Depth
+        unit: nm
+        modality: optical_cd_scatterometry
+        instrument_class: optical_critical_dimension_metrology_system
+        method: profile_model_depth_fit
+        sampling_level: inline_sample
         target: 120.0
         tolerance: 5.0
         noise_std: 0.35
         drivers: {source_rf_power: 1.30, chamber_pressure: -0.80, total_gas_flow: 0.45}
       sidewall_angle_deg:
+        display_name: Sidewall Angle
+        unit: deg
+        modality: optical_cd_scatterometry
+        instrument_class: optical_critical_dimension_metrology_system
+        method: profile_model_sidewall_fit
+        sampling_level: inline_sample
         target: 89.0
         tolerance: 1.5
         noise_std: 0.10
         drivers: {bias_rf_power: 0.55, chamber_pressure: -0.25}
+      post_etch_linewidth_nm:
+        display_name: Post-etch Linewidth
+        unit: nm
+        modality: cd_sem
+        instrument_class: critical_dimension_sem
+        method: top_down_linewidth_measurement
+        sampling_level: inline_sample
+        target: 31.0
+        tolerance: 1.5
+        noise_std: 0.12
+        drivers: {bias_rf_power: -0.55, chamber_pressure: 0.40, total_gas_flow: -0.25}
+    inspection:
+      display_name: Post-etch Surface Review
+      inspection_modality: top_down_review_sem
+      instrument_class: sem_review_system
+      image_type: top_down_sem_grayscale_proxy
+      sampling_level: process_run
+      escalation_modalities:
+        - {modality: fib_sem_cross_section, instrument_class: dual_beam_fib_sem, purpose: sampled_profile_review}
+        - {modality: tem_stem_cross_section, instrument_class: analytical_tem_stem, purpose: advanced_candidate_review}
+      escalation_policy: candidate_evidence_review_only
     vision_related_tags: [chamber_pressure, source_rf_power, total_gas_flow]
 
   deposition:
     display_name: Deposition
     process_step: Deposition
     unit_type: chamber
+    unit_class: pecvd_process_chamber
+    equipment_class:
+      id: pecvd_deposition_system
+      display_name: Plasma-enhanced Chemical Vapor Deposition System
+      category: thin_film_deposition
+      technology: pecvd
+    sensor_tags:
+      chamber_pressure: {display_name: Chamber Pressure, unit: Torr, sensor_type: capacitance_manometer, role: process_control}
+      substrate_temperature: {display_name: Substrate Temperature, unit: degC, sensor_type: pyrometer_or_thermocouple, role: wafer_thermal_control}
+      precursor_flow: {display_name: Precursor Flow, unit: sccm, sensor_type: mass_flow_controller, role: precursor_delivery}
+      carrier_gas_flow: {display_name: Carrier Gas Flow, unit: sccm, sensor_type: mass_flow_controller, role: gas_delivery}
+      rf_power: {display_name: Plasma RF Power, unit: W, sensor_type: rf_forward_power_monitor, role: plasma_source}
+      deposition_time: {display_name: Deposition Time, unit: s, sensor_type: recipe_timer, role: recipe_control}
     samples_per_run: 72
     maintenance_every_cycles: 11
     degradation:
@@ -122,39 +220,73 @@ processes:
       substrate_temperature: 0.040
     equipment:
       - id: DEP-001
+        display_name: PECVD System 1
+        equipment_class_id: pecvd_deposition_system
         bias: {chamber_pressure: -0.025, precursor_flow: -0.25}
         units:
-          - {id: CH-A, bias: {precursor_flow: -0.30, substrate_temperature: -0.20}}
-          - {id: CH-B, bias: {precursor_flow: 0.30, substrate_temperature: 0.20}}
+          - {id: CH-A, display_name: PECVD Chamber A, unit_class: pecvd_process_chamber, bias: {precursor_flow: -0.30, substrate_temperature: -0.20}}
+          - {id: CH-B, display_name: PECVD Chamber B, unit_class: pecvd_process_chamber, bias: {precursor_flow: 0.30, substrate_temperature: 0.20}}
       - id: DEP-002
+        display_name: PECVD System 2
+        equipment_class_id: pecvd_deposition_system
         bias: {chamber_pressure: 0.025, precursor_flow: 0.25}
         units:
-          - {id: CH-A, bias: {precursor_flow: -0.25, substrate_temperature: -0.15}}
-          - {id: CH-B, bias: {precursor_flow: 0.25, substrate_temperature: 0.15}}
+          - {id: CH-A, display_name: PECVD Chamber A, unit_class: pecvd_process_chamber, bias: {precursor_flow: -0.25, substrate_temperature: -0.15}}
+          - {id: CH-B, display_name: PECVD Chamber B, unit_class: pecvd_process_chamber, bias: {precursor_flow: 0.25, substrate_temperature: 0.15}}
     recipes:
-      - {id: CVD_DEMO_A, offsets: {precursor_flow: 0.0, substrate_temperature: 0.0}}
-      - {id: CVD_DEMO_B, offsets: {precursor_flow: 1.20, substrate_temperature: 1.0}}
+      - {id: CVD_DEMO_A, display_name: PECVD Dielectric Film A, recipe_class: pecvd_dielectric_film, offsets: {precursor_flow: 0.0, substrate_temperature: 0.0}}
+      - {id: CVD_DEMO_B, display_name: PECVD Dielectric Film B, recipe_class: pecvd_dielectric_film, offsets: {precursor_flow: 1.20, substrate_temperature: 1.0}}
     phases: [pumpdown, heatup, deposition, purge]
     relations:
       - {kind: correlation, a: precursor_flow, b: carrier_gas_flow, coefficient: 0.65}
       - {kind: linear, a: substrate_temperature, b: rf_power, coefficient: 0.50}
     metrology:
       film_thickness_nm:
+        display_name: Film Thickness
+        unit: nm
+        modality: spectroscopic_ellipsometry
+        instrument_class: spectroscopic_ellipsometer
+        method: optical_model_fit
+        sampling_level: inline_sample
         target: 88.0
         tolerance: 3.0
         noise_std: 0.20
         drivers: {precursor_flow: 1.10, substrate_temperature: 0.55, deposition_time: 0.35}
       uniformity_percent:
+        display_name: Within-wafer Thickness Uniformity
+        unit: percent
+        modality: spectroscopic_ellipsometry_map
+        instrument_class: spectroscopic_ellipsometer
+        method: multi_site_thickness_map
+        sampling_level: inline_sample
         target: 98.0
         tolerance: 2.0
         noise_std: 0.15
         drivers: {precursor_flow: -0.50, chamber_pressure: -0.35}
+    inspection:
+      display_name: Deposited Film Surface Inspection
+      inspection_modality: brightfield_optical_surface_inspection
+      instrument_class: unpatterned_wafer_optical_inspector
+      image_type: top_down_optical_grayscale_proxy
+      sampling_level: process_run
     vision_related_tags: [precursor_flow, carrier_gas_flow, substrate_temperature]
 
   cmp:
     display_name: CMP
     process_step: CMP
     unit_type: platen
+    unit_class: polishing_head_platen_station
+    equipment_class:
+      id: rotary_cmp_system
+      display_name: Rotary Chemical-mechanical Planarization System
+      category: chemical_mechanical_planarization
+      technology: rotary_platen_cmp
+    sensor_tags:
+      down_force: {display_name: Carrier Down Force, unit: psi, sensor_type: pressure_control_readback, role: mechanical_input}
+      platen_speed: {display_name: Platen Speed, unit: rpm, sensor_type: spindle_encoder, role: motion_control}
+      carrier_speed: {display_name: Carrier Speed, unit: rpm, sensor_type: spindle_encoder, role: motion_control}
+      slurry_flow: {display_name: Slurry Flow, unit: mL/min, sensor_type: liquid_flow_meter, role: slurry_delivery}
+      motor_current: {display_name: Platen Motor Current, unit: A, sensor_type: drive_current_monitor, role: load_indicator}
     samples_per_run: 60
     maintenance_every_cycles: 9
     degradation:
@@ -163,31 +295,53 @@ processes:
       down_force: 0.006
     equipment:
       - id: CMP-001
+        display_name: Rotary CMP System 1
+        equipment_class_id: rotary_cmp_system
         bias: {down_force: -0.015, slurry_flow: -0.60}
         units:
-          - {id: PLATEN-A, bias: {slurry_flow: -0.50, motor_current: -0.05}}
-          - {id: PLATEN-B, bias: {slurry_flow: 0.50, motor_current: 0.05}}
+          - {id: PLATEN-A, display_name: Head-Platen Station A, unit_class: polishing_head_platen_station, bias: {slurry_flow: -0.50, motor_current: -0.05}}
+          - {id: PLATEN-B, display_name: Head-Platen Station B, unit_class: polishing_head_platen_station, bias: {slurry_flow: 0.50, motor_current: 0.05}}
       - id: CMP-002
+        display_name: Rotary CMP System 2
+        equipment_class_id: rotary_cmp_system
         bias: {down_force: 0.015, slurry_flow: 0.60}
         units:
-          - {id: PLATEN-A, bias: {slurry_flow: -0.45, motor_current: -0.04}}
-          - {id: PLATEN-B, bias: {slurry_flow: 0.45, motor_current: 0.04}}
+          - {id: PLATEN-A, display_name: Head-Platen Station A, unit_class: polishing_head_platen_station, bias: {slurry_flow: -0.45, motor_current: -0.04}}
+          - {id: PLATEN-B, display_name: Head-Platen Station B, unit_class: polishing_head_platen_station, bias: {slurry_flow: 0.45, motor_current: 0.04}}
     recipes:
-      - {id: CMP_DEMO_A, offsets: {down_force: 0.0, slurry_flow: 0.0}}
-      - {id: CMP_DEMO_B, offsets: {down_force: 0.06, slurry_flow: 2.0}}
+      - {id: CMP_DEMO_A, display_name: Oxide CMP A, recipe_class: oxide_cmp, offsets: {down_force: 0.0, slurry_flow: 0.0}}
+      - {id: CMP_DEMO_B, display_name: Oxide CMP B, recipe_class: oxide_cmp, offsets: {down_force: 0.06, slurry_flow: 2.0}}
     phases: [load, ramp, polish, rinse]
     relations:
       - {kind: correlation, a: down_force, b: motor_current, coefficient: 0.75}
       - {kind: correlation, a: platen_speed, b: carrier_speed, coefficient: 0.70}
     metrology:
       remaining_film_nm:
+        display_name: Remaining Film Thickness
+        unit: nm
+        modality: spectroscopic_reflectometry
+        instrument_class: film_thickness_metrology_system
+        method: optical_thickness_fit
+        sampling_level: inline_sample
         target: 42.0
         tolerance: 2.5
         noise_std: 0.18
         drivers: {down_force: -0.70, platen_speed: -0.45, slurry_flow: -0.55}
       within_wafer_nonuniformity_percent:
+        display_name: Within-wafer Non-uniformity
+        unit: percent
+        modality: optical_film_thickness_map
+        instrument_class: film_thickness_metrology_system
+        method: multi_site_thickness_map
+        sampling_level: inline_sample
         target: 3.0
         tolerance: 1.2
         noise_std: 0.10
         drivers: {slurry_flow: -0.50, motor_current: 0.65}
+    inspection:
+      display_name: Post-CMP Surface Inspection
+      inspection_modality: darkfield_optical_surface_inspection
+      instrument_class: patterned_wafer_surface_inspector
+      image_type: top_down_darkfield_grayscale_proxy
+      sampling_level: process_run
     vision_related_tags: [slurry_flow, down_force, motor_current]

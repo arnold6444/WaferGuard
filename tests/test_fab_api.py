@@ -104,6 +104,16 @@ def test_fab_read_routes_and_backward_compatible_extensions(api_client: TestClie
     equipment = api_client.get("/api/v1/fab/equipment?process_id=cmp")
     assert equipment.status_code == 200
     assert equipment.json()[0]["unit_id"] == "PLATEN_A"
+    assert equipment.json()[0]["has_runtime_data"] is True
+
+    definitions = api_client.get("/api/v1/fab/process-definitions?process_id=etch")
+    assert definitions.status_code == 200
+    etch = definitions.json()[0]
+    assert etch["equipment_class"]["id"] == "icp_rie_etch_system"
+    assert "chamber_pressure" in etch["sensor_tags"]
+    assert {item["modality"] for item in etch["metrology_plan"]} >= {
+        "cd_sem", "optical_cd_scatterometry",
+    }
 
     live = api_client.get(
         "/api/v1/process/cmp/live?equipment_id=CMP_EQ_01&unit_id=PLATEN_A"
