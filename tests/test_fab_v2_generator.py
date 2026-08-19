@@ -33,6 +33,7 @@ def test_config_contract_rejects_executable_or_unknown_relations():
         "etch_chamber_contamination",
         "deposition_precursor_instability",
         "cmp_slurry_degradation",
+        "cleaning_chemical_concentration_drift",
     }
     invalid = copy.deepcopy(config)
     invalid["processes"]["cmp"]["relations"][0]["kind"] = "eval"
@@ -47,6 +48,7 @@ def test_process_specific_equipment_sensor_and_measurement_contracts():
         "etch": "icp_rie_etch_system",
         "deposition": "pecvd_deposition_system",
         "cmp": "rotary_cmp_system",
+        "cleaning": "single_wafer_wet_clean_system",
     }
     for process_id, expected_class in expected_classes.items():
         process = config["processes"][process_id]
@@ -75,6 +77,10 @@ def test_process_specific_equipment_sensor_and_measurement_contracts():
     assert config["processes"]["cmp"]["inspection"]["inspection_modality"] == (
         "darkfield_optical_surface_inspection"
     )
+    cleaning = config["processes"]["cleaning"]
+    assert cleaning["sensor_tags"]["di_water_resistivity"]["unit"] == "MOhm-cm"
+    assert cleaning["metrology"]["added_particle_count"]["modality"] == "darkfield_surface_scan"
+    assert cleaning["inspection"]["instrument_class"] == "unpatterned_wafer_surface_inspector"
 
 
 def test_generated_etch_run_exposes_public_equipment_and_metrology_context():
@@ -129,12 +135,15 @@ def test_fixed_seed_reproduces_identity_payload_and_feature_contract(local_image
     ]
 
 
-def test_four_faults_change_sensor_and_metrology_without_public_truth(local_images):
+def test_five_faults_change_sensor_and_metrology_without_public_truth(local_images):
     cases = {
         "photo_focus_drift": ("photo", "focus_offset", "critical_dimension_nm"),
         "etch_chamber_contamination": ("etch", "chamber_pressure", "etch_depth_nm"),
         "deposition_precursor_instability": ("deposition", "precursor_flow", "film_thickness_nm"),
         "cmp_slurry_degradation": ("cmp", "slurry_flow", "remaining_film_nm"),
+        "cleaning_chemical_concentration_drift": (
+            "cleaning", "drain_particle_count", "added_particle_count"
+        ),
     }
     for fault_id, (process_id, tag, metric) in cases.items():
         normal = VirtualFabGenerator(seed=23, simulation_id=f"SIM-{process_id}").generate_process_run(

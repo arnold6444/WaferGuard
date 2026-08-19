@@ -115,6 +115,17 @@ def test_fab_read_routes_and_backward_compatible_extensions(api_client: TestClie
         "cd_sem", "optical_cd_scatterometry",
     }
 
+    cleaning_definitions = api_client.get(
+        "/api/v1/fab/process-definitions?process_id=cleaning"
+    )
+    assert cleaning_definitions.status_code == 200
+    cleaning = cleaning_definitions.json()[0]
+    assert cleaning["equipment_class"]["id"] == "single_wafer_wet_clean_system"
+    assert "di_water_resistivity" in cleaning["sensor_tags"]
+    assert {item["metric_id"] for item in cleaning["metrology_plan"]} >= {
+        "added_particle_count", "surface_metal_contamination_index",
+    }
+
     live = api_client.get(
         "/api/v1/process/cmp/live?equipment_id=CMP_EQ_01&unit_id=PLATEN_A"
     )

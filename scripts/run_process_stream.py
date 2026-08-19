@@ -33,7 +33,10 @@ def main() -> None:
     args = parse_args()
     process_ids = list(GENERIC_DASHBOARD_PROCESSES) if args.process == "all" else [args.process]
     if any(process_id not in GENERIC_DASHBOARD_PROCESSES for process_id in process_ids):
-        raise SystemExit("Use run_chamber_stream.py for Etch. Generic temporal runtime supports photo/deposition/cmp.")
+        raise SystemExit(
+            "Use run_chamber_stream.py for Etch. Generic temporal runtime supports "
+            "photo/deposition/cmp/cleaning."
+        )
 
     histories = {process_id: [] for process_id in process_ids}
     generators = {

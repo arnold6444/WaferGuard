@@ -81,6 +81,7 @@ def test_workbench_defaults_do_not_execute_training_or_artifact_paths() -> None:
     assert args.run_experiment is False
     assert args.run_final_test is False
     assert args.create_candidate is False
+    assert parser().parse_args(["--process", "cleaning"]).process == "cleaning"
     assert seed_robustness(pd.DataFrame({"synthetic_seed": [1]}), [False])["status"] == "ground-truth unavailable"
 
 

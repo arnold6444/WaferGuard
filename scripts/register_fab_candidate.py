@@ -16,7 +16,11 @@ from app.services.fab_models import register_fab_candidate  # noqa: E402
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Register an externally trained FAB artifact as Staging.")
     parser.add_argument("--artifact", required=True)
-    parser.add_argument("--process", choices=("photo", "etch", "deposition", "cmp"), required=True)
+    parser.add_argument(
+        "--process",
+        choices=("photo", "etch", "deposition", "cmp", "cleaning"),
+        required=True,
+    )
     parser.add_argument("--precision", type=float, required=True)
     parser.add_argument("--recall", type=float, required=True)
     parser.add_argument("--f2", type=float, required=True)

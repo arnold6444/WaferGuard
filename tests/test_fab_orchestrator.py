@@ -92,11 +92,25 @@ def test_cli_defaults_to_mqtt_and_accepts_direct_debug() -> None:
     assert parse_args([]).transport == "mqtt"
     args = parse_args(["--process", "cmp", "--transport", "direct", "--seed", "7"])
     assert (args.process, args.transport, args.seed) == ("cmp", "direct", 7)
+    cleaning = parse_args([
+        "--process", "cleaning", "--fault", "cleaning_chemical_concentration_drift",
+    ])
+    assert cleaning.process == "cleaning"
+    assert cleaning.fault == "cleaning_chemical_concentration_drift"
 
 
+@pytest.mark.parametrize(
+    ("process_id", "fault_id"),
+    [
+        ("cmp", "cmp_slurry_degradation"),
+        ("cleaning", "cleaning_chemical_concentration_drift"),
+    ],
+)
 def test_one_small_direct_process_run_reaches_fusion_and_rca(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    process_id: str,
+    fault_id: str,
 ) -> None:
     database = tmp_path / "fab-orchestrator.db"
     monkeypatch.setattr(db, "DB_PATH", database)
@@ -105,7 +119,7 @@ def test_one_small_direct_process_run_reaches_fusion_and_rca(
     storage.init_db()
 
     fab_config = copy.deepcopy(load_fab_config())
-    fab_config["processes"]["cmp"]["samples_per_run"] = 3
+    fab_config["processes"][process_id]["samples_per_run"] = 3
     fault_catalog = load_fault_catalog()
     generator = VirtualFabGenerator(fab_config, fault_catalog, seed=17)
     generator._inspection.persist_images = False
@@ -120,11 +134,12 @@ def test_one_small_direct_process_run_reaches_fusion_and_rca(
     result = orchestrator.run(
         lots=1,
         wafers_per_lot=1,
-        process="cmp",
-        fault="cmp_slurry_degradation",
+        process=process_id,
+        fault=fault_id,
     )
 
     assert len(result["process_runs"]) == 1
+    assert result["process_runs"][0]["process_id"] == process_id
     assert result["process_runs"][0]["fusion"]["process_run_id"]
     assert result["process_runs"][0]["rca"]["result_label"] == "Candidate root cause"
     assert result["process_runs"][0]["evaluation"]["evaluated"] is True

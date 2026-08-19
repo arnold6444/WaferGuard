@@ -19,7 +19,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--wafers-per-lot", type=int, default=1)
     parser.add_argument(
         "--process",
-        choices=("all", "photo", "etch", "deposition", "cmp"),
+        choices=("all", "photo", "etch", "deposition", "cmp", "cleaning"),
         default="all",
     )
     parser.add_argument(
@@ -29,6 +29,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "etch_chamber_contamination",
             "deposition_precursor_instability",
             "photo_focus_drift",
+            "cleaning_chemical_concentration_drift",
         ),
     )
     parser.add_argument("--fault-after-cycle", type=int, default=0)

@@ -50,3 +50,15 @@ faults:
       remaining_film_nm: 3.8
       within_wafer_nonuniformity_percent: 2.2
     vision: {defect: scratch, base_probability: 0.22, max_probability: 0.92}
+
+  cleaning_chemical_concentration_drift:
+    process_id: cleaning
+    detector_anomaly: chemical_concentration_drift
+    sensor_effects:
+      chemical_concentration_percent: {kind: linear, coefficient: -5.0}
+      di_water_resistivity: {kind: linear, coefficient: -2.8}
+      drain_particle_count: {kind: linear, coefficient: 4.2}
+    quality_effects:
+      added_particle_count: 8.0
+      surface_metal_contamination_index: 0.9
+    vision: {defect: particle, base_probability: 0.22, max_probability: 0.92}

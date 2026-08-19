@@ -32,15 +32,15 @@ Lot → Chamber lifecycle → Data Quality Gate → Expected Resistance
 
 ### 공통 profile
 
-`GET /api/v1/process/profiles`는 다음 8개 공정의 표시 metadata를 제공한다.
+`GET /api/v1/process/profiles`는 다음 9개 공정의 표시 metadata를 제공한다.
 
 ```text
-Oxidation · Photo · Etch · Deposition · Implant · Metal · CMP · Inspection
+Oxidation · Photo · Etch · Deposition · Implant · Metal · CMP · Cleaning · Inspection
 ```
 
 각 profile은 `process_id`, `display_name`, `equipment_type`, `connection`, `data_source`, `parameters[]`를 가진다. parameter에는 label, unit, sample normal range, display order가 포함된다.
 
-Etch와 Inspection만 runtime/proxy runtime에 연결되어 있다. 나머지는 `Demo profile · Not connected`다.
+Photo, Etch, Deposition, CMP, Cleaning은 FAB v2 synthetic runtime에 연결되고 Inspection은 proxy runtime을 유지한다. 나머지는 `Demo profile · Not connected`다.
 
 ### Etch
 

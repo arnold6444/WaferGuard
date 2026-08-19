@@ -21,7 +21,7 @@ from app.services import db
 
 
 FAB_SCHEMA_VERSION = "fab.v2"
-_ROUTE_ORDER = {"photo": 1, "etch": 2, "deposition": 3, "cmp": 4, "inspection": 5}
+_ROUTE_ORDER = {"photo": 1, "etch": 2, "deposition": 3, "cmp": 4, "cleaning": 5, "inspection": 6}
 _PRIVATE_GT_KEYS = {
     "fault_id",
     "ground_truth",

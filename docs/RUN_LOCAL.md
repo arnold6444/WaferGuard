@@ -28,7 +28,7 @@ docker compose ps
 
 ## 3. FAB 데이터 실행
 
-Photo, Etch, Deposition, CMP는 모두 같은 **Synthetic Runtime 지원 공정**입니다. 다만 화면의 상태는 실제 데이터 상태를 그대로 표시합니다.
+Photo, Etch, Deposition, CMP, Cleaning은 모두 같은 **Synthetic Runtime 지원 공정**입니다. Cleaning은 post-CMP single-wafer wet clean 단계로 실행됩니다. 다만 화면의 상태는 실제 데이터 상태를 그대로 표시합니다.
 
 - `LIVE`: 해당 공정의 Run이 현재 실행 중
 - `LATEST STORED`: 유한 스트림이 끝났고 최근 Run이 DB에 저장됨
@@ -41,7 +41,7 @@ Photo, Etch, Deposition, CMP는 모두 같은 **Synthetic Runtime 지원 공정*
 .\.venv\Scripts\python.exe scripts\run_fab_stream.py --lots 1 --wafers-per-lot 1 --process cmp --seed 42 --transport mqtt
 ```
 
-Dashboard를 먼저 연 뒤 네 공정의 상태 변화를 눈으로 보려면 `--process`를 생략하고 메시지 간격을 줍니다.
+Dashboard를 먼저 연 뒤 다섯 공정의 상태 변화를 눈으로 보려면 `--process`를 생략하고 메시지 간격을 줍니다.
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_fab_stream.py --lots 1 --wafers-per-lot 1 --seed 42 --transport mqtt --interval 0.2
@@ -51,6 +51,12 @@ Dashboard를 먼저 연 뒤 네 공정의 상태 변화를 눈으로 보려면 `
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_fab_stream.py --lots 1 --wafers-per-lot 1 --process cmp --seed 42 --transport direct
+```
+
+Cleaning만 빠르게 확인하려면 다음 명령을 사용합니다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_fab_stream.py --lots 1 --wafers-per-lot 1 --process cleaning --seed 42 --transport direct
 ```
 
 ## 4. Backend와 Dashboard

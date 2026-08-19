@@ -69,13 +69,13 @@ python scripts/build_chamber_dashboard_data.py --input "/path/to/sample.csv" --o
 
 ### 🏗️ Virtual FAB Multimodal v2
 
-Photo → Etch → Deposition → CMP를 Lot/Wafer/Process Run identity로 연결하고, 각 run의 FDC telemetry → Metrology → Inspection → late fusion → Candidate RCA를 같은 trace로 저장합니다. 기본 transport는 Mosquitto QoS 1이며 Direct는 빠른 개발 확인용입니다.
+Photo → Etch → Deposition → CMP → Cleaning을 Lot/Wafer/Process Run identity로 연결하고, 각 run의 FDC telemetry → Metrology → Inspection → late fusion → Candidate RCA를 같은 trace로 저장합니다. Cleaning은 single-wafer wet clean의 화학액·DIW·건조·particle context를 synthetic proxy로 제공합니다. 기본 transport는 Mosquitto QoS 1이며 Direct는 빠른 개발 확인용입니다.
 
 ```powershell
 # PostgreSQL + MQTT
 docker compose up -d postgres mosquitto
 
-# 기본: MQTT, 1 Lot × 1 Wafer × 4공정
+# 기본: MQTT, 1 Lot × 1 Wafer × 5공정
 python scripts/run_fab_stream.py --lots 1 --wafers-per-lot 1 --seed 42
 
 # 빠른 골격 확인: CMP 한 공정, Direct transport
@@ -370,7 +370,7 @@ app/
     chamber_runtime.py       # warm-up/inference/retrain/promote lifecycle
     chamber_data_quality.py  # VALID/WARNING/REJECT + aggregate events
     fab_scenario.py          # Generator → inspection 분리 orchestration
-    fab_generator.py         # 4공정 Virtual FAB + lifecycle/fault propagation
+    fab_generator.py         # 5공정 Virtual FAB + lifecycle/fault propagation
     fab_mqtt.py              # QoS 1 MQTT/direct 공통 transport router
     fab_storage.py           # v2 additive schema/read model/consumer receipt
     fab_detection.py         # signed detector output + context fallback

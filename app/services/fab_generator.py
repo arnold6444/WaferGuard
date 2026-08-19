@@ -1,6 +1,6 @@
-"""Deterministic four-process Virtual FAB generator.
+"""Deterministic five-process Virtual FAB generator.
 
-Photo, Deposition, and CMP retain ``TemporalProcessGenerator`` behavior. Etch
+Photo, Deposition, CMP, and Cleaning retain ``TemporalProcessGenerator`` behavior. Etch
 retains the stateful Chamber generator through a small adapter. FAB identity,
 context baselines, maintenance, latent faults, and delayed modalities are added
 without changing either legacy runtime.
@@ -39,7 +39,7 @@ FAB_CONFIG_PATH = ROOT_DIR / "configs" / "fab_simulator.yaml"
 FAULT_CATALOG_PATH = ROOT_DIR / "configs" / "fault_catalog.yaml"
 FAB_GENERATOR_VERSION = "virtual-fab-v2"
 ETCH_ADAPTER_VERSION = "etch-chamber-adapter-v1"
-SUPPORTED_PROCESSES = ("photo", "etch", "deposition", "cmp")
+SUPPORTED_PROCESSES = ("photo", "etch", "deposition", "cmp", "cleaning")
 ALLOWED_RELATIONS = {"linear", "ratio", "difference", "correlation"}
 ALLOWED_EFFECTS = {"linear", "step", "oscillation"}
 
@@ -200,8 +200,9 @@ def validate_fault_catalog(
     if set(faults) != {
         "photo_focus_drift", "etch_chamber_contamination",
         "deposition_precursor_instability", "cmp_slurry_degradation",
+        "cleaning_chemical_concentration_drift",
     }:
-        raise ValueError("Fault catalog must define the four FAB v2 latent faults")
+        raise ValueError("Fault catalog must define the five FAB v2 latent faults")
     for fault_id, fault in faults.items():
         process_id = str(fault.get("process_id") or "")
         if process_id not in config["processes"]:
@@ -236,7 +237,7 @@ class _UnitState:
 
 
 class VirtualFabGenerator:
-    """Generate deterministic wafer process runs for the four-process route."""
+    """Generate deterministic wafer process runs for the five-process route."""
 
     def __init__(
         self,

@@ -320,6 +320,67 @@ Pop-Location
 git diff --check
 ```
 
+---
+
+# FAB Cleaning Runtime Delta (2026-08-19)
+
+## Goal
+
+기존 FAB v2 route에 Cleaning을 실제 실행 가능한 다섯 번째 공정으로 추가해 CLEAN & CMP 장비·센서·계측 관점의 추적과 이상탐지를 지원한다.
+
+## Scope
+
+### In Scope
+
+- canonical `cleaning` process identity와 Photo → Etch → Deposition → CMP → Cleaning route
+- single-wafer wet cleaner 장비/Unit/Recipe와 화학액·DIW·건조 sensor tag
+- particle/metal contamination metrology, surface inspection, cleaning latent fault
+- Direct/MQTT CLI 선택, storage route order, API process definition/live/equipment read model
+- Fab Overview와 Process Monitoring의 Cleaning runtime card/detail
+- generator/config/fault/API/frontend 계약 테스트와 실행·구조 문서
+
+### Out of Scope
+
+- 실제 SK hynix recipe/setpoint 또는 장비 제어
+- cleaning을 여러 기존 공정 사이에 반복 삽입하는 queue simulator
+- Diffusion 신규 runtime, 기존 Deposition/CMP process ID의 breaking rename
+- 모델 학습·튜닝·artifact 생성
+- CI skip, assertion 약화, workflow 비활성화
+
+## Decisions
+
+- 기존 `deposition`, `cmp` ID는 호환을 위해 유지하고 UI 설명에서 각각 Thin Film, C&C 범주를 보강한다.
+- 한 wafer당 한 Cleaning run을 post-CMP 단계에 배치한다. 다단계 inter-clean은 향후 route 반복 모델 범위로 남긴다.
+- Cleaning은 기존 `TemporalProcessGenerator` 계약을 재사용하며 별도 runtime 엔진을 만들지 않는다.
+- synthetic sensor 범위와 fault coefficient는 실제 FAB 기준이 아닌 개발용 proxy로 명시한다.
+
+## Implementation Steps
+
+1. process runtime/FAB/fault YAML에 Cleaning profile, equipment, relation, metrology, inspection, latent fault를 추가한다.
+2. generator, CLI, orchestrator, storage route 계약을 5공정으로 확장한다.
+3. Fab Overview/Process Monitoring에 Cleaning capability와 route를 연결한다.
+4. generator/fault/context/CLI/API/frontend 계약과 문서를 갱신한다.
+5. targeted tests, compile, frontend build, GitHub CI 후 PR을 병합한다.
+
+## Definition of Done
+
+- `--process cleaning`과 전체 route가 Cleaning process run을 생성할 수 있다.
+- Cleaning telemetry에 equipment/unit/recipe/phase와 화학액·DIW·건조 tag가 있다.
+- metrology/inspection과 latent fault가 public GT leakage 없이 연결된다.
+- API와 두 dashboard 화면이 Cleaning을 FAB v2 runtime으로 표시한다.
+- 기존 네 공정과 legacy 화면/API 계약이 유지된다.
+- GitHub CI가 정상 통과하고 PR이 main에 병합된다.
+
+## Verification
+
+```powershell
+$env:STORAGE_BACKEND='sqlite'
+python -m pytest -q -W error tests/test_fab_v2_generator.py tests/test_fab_orchestrator.py tests/test_fab_api.py
+python -m compileall -q app scripts tests
+Push-Location frontend; npm.cmd run build; Pop-Location
+git diff --check
+```
+
 # Progress
 
 - [x] Repository analysis

@@ -14,17 +14,18 @@ const TAB_DEFS = [
   { id: "anomaly", ko: "이상", en: "Anomaly", icon: "alert" },
   { id: "model", ko: "모델", en: "Model", icon: "box" },
 ];
-const MULTIMODAL_RUNTIME = new Set(["photo", "deposition", "cmp"]);
-const FAB_V2_PROCESSES = ["photo", "etch", "deposition", "cmp"];
+const MULTIMODAL_RUNTIME = new Set(["photo", "deposition", "cmp", "cleaning"]);
+const FAB_V2_PROCESSES = ["photo", "etch", "deposition", "cmp", "cleaning"];
 const FAB_V2_RUNTIME = new Set(FAB_V2_PROCESSES);
 const DEFAULT_PROFILES = [
   ["oxidation", "Oxidation", "Furnace"],
   ["photo", "Photo", "Scanner / Track"],
   ["etch", "Etch", "Plasma Etcher"],
-  ["deposition", "Deposition", "CVD / PVD"],
+  ["deposition", "Deposition", "CVD / PVD (Thin Film)"],
   ["implant", "Implant", "Ion Implanter"],
   ["metal", "Metal", "Metal Deposition"],
-  ["cmp", "CMP", "Polisher"],
+  ["cmp", "CMP", "Polisher (C&C)"],
+  ["cleaning", "Cleaning", "Single-wafer Wet Cleaner (C&C)"],
   ["inspection", "Inspection", "Wafer Inspection"],
 ].map(([process_id, display_name, equipment_type]) => ({ process_id, display_name, equipment_type, parameters: [] }));
 

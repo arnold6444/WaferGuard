@@ -12,7 +12,7 @@ from app.services.process_runtime import _metrics
 from app.services.process_temporal import TemporalProcessGenerator, simulate_temporal_sample
 
 MAX_LIVE_HISTORY = 180
-GENERIC_DASHBOARD_PROCESSES = ("photo", "deposition", "cmp")
+GENERIC_DASHBOARD_PROCESSES = ("photo", "deposition", "cmp", "cleaning")
 
 
 def deviation_map(image_key: str | None, process_id: str, wafer_id: str) -> str | None:
