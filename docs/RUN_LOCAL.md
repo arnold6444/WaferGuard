@@ -146,8 +146,36 @@ Notebook 없이 같은 계약을 파이프라인에서 실행합니다. 기본 �
 
 Production 승격은 기존 MLOps 화면/수동 API에서만 수행합니다.
 
-## 7. 종료
+## 7. 종료와 데이터 초기화
+
+실행한 터미널에서는 먼저 `Ctrl+C`를 누릅니다. `run_fab_stream.py`는 유한 실행이라 보통 자동 종료되지만, 중간에 멈추려면 같은 방식으로 `Ctrl+C`를 누르면 됩니다.
+
+터미널을 닫아서 생성기 PID를 잃어버린 경우에는 아래 명령으로 **FAB 생성기만** 찾아 종료합니다.
+
+```powershell
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -like '*WaferGuard*run_fab_stream.py*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+```
+
+PostgreSQL과 Mosquitto를 중지하되 DB 데이터는 보존하려면 다음 명령을 사용합니다.
 
 ```powershell
 docker compose stop postgres mosquitto
 ```
+
+테스트 기록과 로컬 생성 파일만 삭제하려면 프로젝트 루트에서 실행합니다. 소스 코드와 입력용 `.gitkeep`은 삭제하지 않습니다.
+
+```powershell
+Remove-Item -LiteralPath .pytest_cache,outputs,runtime,frontend\dist -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem app,scripts,tests -Directory -Recurse -Filter __pycache__ |
+  Remove-Item -Recurse -Force
+```
+
+PostgreSQL 데이터까지 완전히 초기화하려면 아래 명령을 사용합니다. 이 명령은 Compose 컨테이너와 DB 볼륨을 영구 삭제합니다.
+
+```powershell
+docker compose down --volumes --remove-orphans
+```
+
+다시 시작할 때는 `docker compose up -d postgres mosquitto`를 실행하면 빈 DB가 자동 생성됩니다.
