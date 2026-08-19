@@ -182,3 +182,54 @@ profiles:
         residue: [slurry_flow, platen_speed]
         dishing: [down_force, platen_speed, carrier_speed]
         erosion: [down_force, slurry_flow, platen_speed]
+
+  cleaning:
+    display_name: Cleaning
+    process_step: Cleaning
+    equipment_prefix: CLEAN
+    recipe_id: CLEAN_POST_CMP_A
+    timeseries:
+      tags:
+        chemical_concentration_percent: {mean: 0.50, std: 0.015}
+        bath_temperature: {mean: 25.0, std: 0.30}
+        chemical_flow: {mean: 1200.0, std: 24.0}
+        di_water_resistivity: {mean: 18.1, std: 0.08}
+        spin_speed: {mean: 900.0, std: 15.0}
+        dryer_temperature: {mean: 65.0, std: 0.80}
+        drain_particle_count: {mean: 8.0, std: 1.2}
+      temporal:
+        ar: 0.90
+        noise_scale: 0.50
+        correlations:
+          - {a: chemical_concentration_percent, b: chemical_flow, rho: 0.55}
+          - {a: di_water_resistivity, b: drain_particle_count, rho: -0.50}
+          - {a: spin_speed, b: dryer_temperature, rho: 0.35}
+        phases:
+          - name: pre_rinse
+            length: 12
+            offsets: {chemical_concentration_percent: -1.4, bath_temperature: -0.2, chemical_flow: -0.4, di_water_resistivity: 0.2, spin_speed: -1.0, dryer_temperature: -1.0, drain_particle_count: 0.4}
+          - name: chemical_clean
+            length: 22
+            offsets: {chemical_concentration_percent: 0.6, bath_temperature: 0.4, chemical_flow: 0.7, di_water_resistivity: -0.2, spin_speed: -0.3, dryer_temperature: -0.8, drain_particle_count: 0.8}
+          - name: di_rinse
+            length: 18
+            offsets: {chemical_concentration_percent: -1.0, bath_temperature: 0.0, chemical_flow: 0.5, di_water_resistivity: 0.5, spin_speed: 0.2, dryer_temperature: -0.4, drain_particle_count: -0.2}
+          - name: spin_dry
+            length: 12
+            offsets: {chemical_concentration_percent: -1.5, bath_temperature: -0.3, chemical_flow: -1.3, di_water_resistivity: 0.3, spin_speed: 0.9, dryer_temperature: 0.7, drain_particle_count: -0.5}
+      anomalies:
+        chemical_concentration_drift: {kind: drift, tag: chemical_concentration_percent, shift_sigma: -7.0, drift_per_step: -0.45}
+        chemical_flow_drop: {kind: drift, tag: chemical_flow, shift_sigma: -6.0, drift_per_step: -0.40}
+        bath_temperature_drift: {kind: drift, tag: bath_temperature, shift_sigma: 6.0, drift_per_step: 0.35}
+        di_water_quality_drop: {kind: drift, tag: di_water_resistivity, shift_sigma: -7.0, drift_per_step: -0.45}
+        spin_speed_shift: {kind: change_point, tag: spin_speed, shift_sigma: 6.0}
+        particle_excursion: {kind: change_point, tag: drain_particle_count, shift_sigma: 8.0}
+        sensor_spike: {kind: spike, tag: chemical_flow, shift_sigma: 8.0}
+        sensor_stuck: {kind: stuck, tag: chemical_concentration_percent}
+        correlation_break: {kind: correlation_break, tags: [di_water_resistivity, drain_particle_count], break_sigma: 4.5}
+    vision:
+      defects: [particle, residue, watermark]
+      root_cause_tags:
+        particle: [drain_particle_count, di_water_resistivity, chemical_flow]
+        residue: [chemical_concentration_percent, chemical_flow, bath_temperature]
+        watermark: [spin_speed, dryer_temperature, di_water_resistivity]

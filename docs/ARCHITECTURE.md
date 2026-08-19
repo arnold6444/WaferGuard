@@ -3,7 +3,7 @@
 ## 전체 흐름
 
 ```text
-Virtual FAB (Photo → Etch → Deposition → CMP)
+Virtual FAB (Photo → Etch → Deposition → CMP → Cleaning)
   → fab.v2 identity/event
   → MQTT QoS 1 또는 Direct debug
   → 공통 Message Router
@@ -38,14 +38,15 @@ compose.yaml                PostgreSQL과 Mosquitto
 
 ## 장비 중심 Context
 
-네 공정은 공정 이름만 보여주지 않고 `Equipment / Unit / Recipe / Sensor Tag / Unit`을 함께 보존합니다.
+다섯 공정은 공정 이름만 보여주지 않고 `Equipment / Unit / Recipe / Sensor Tag / Unit`을 함께 보존합니다.
 
 | 공정 | 대표 장비 | 주요 sensor/context | 기본 post-process evidence |
 |---|---|---|---|
 | Photo | scanner + coat/develop track | focus, exposure, stage, resist/track condition | overlay/CD 계측, 광학 pattern inspection |
 | Etch | plasma etcher | RF power, pressure, gas flow, endpoint, chamber condition | CD-SEM linewidth/profile, top-down SEM; 필요 시 FIB 단면 TEM/STEM 검토 제안 |
-| Deposition | CVD/PVD tool | precursor/MFC, pressure, temperature, RF | ellipsometry/reflectometry film thickness·uniformity |
-| CMP | polisher | platen/head speed, slurry flow, pressure, motor/current | remaining film·uniformity, surface defect scan |
+| Deposition (Thin Film) | CVD/PVD tool | precursor/MFC, pressure, temperature, RF | ellipsometry/reflectometry film thickness·uniformity |
+| CMP (C&C) | polisher | platen/head speed, slurry flow, pressure, motor/current | remaining film·uniformity, surface defect scan |
+| Cleaning (C&C) | single-wafer wet cleaner | chemical concentration/flow/temperature, DIW resistivity, spin/dry, drain particles | particle adders·surface contamination proxy, darkfield surface inspection |
 
 Metrology/inspection payload는 `instrument_class`, `inspection_modality`, `image_type`, `sampling_level`, `measurements`를 포함합니다. Synthetic 값은 실제 FAB 보정치가 아니며, RCA는 항상 `Candidate root cause`와 확인해야 할 장비/계측 항목을 제안합니다. 담당자 Review가 누적되기 전에는 자동 판정이나 자동 조치를 하지 않습니다.
 

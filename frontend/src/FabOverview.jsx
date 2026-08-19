@@ -15,7 +15,7 @@ const SOURCE_LABEL = {
   fab_v2_persistence: "FAB v2 DB",
   mqtt_runtime: "MQTT Runtime",
 };
-const CONNECTED_ORDER = ["photo", "etch", "deposition", "cmp"];
+const CONNECTED_ORDER = ["photo", "etch", "deposition", "cmp", "cleaning"];
 const PROFILE_ORDER = [...CONNECTED_ORDER, "oxidation", "implant", "metal", "inspection"];
 const FALLBACK_OVERVIEW = {
   metrics: {
@@ -25,7 +25,7 @@ const FALLBACK_OVERVIEW = {
     critical: { value: "—", data_source: "demo_profile" },
   },
   process_status: [
-    ["photo", "Photo"], ["etch", "Etch"], ["deposition", "Deposition"], ["cmp", "CMP"],
+    ["photo", "Photo"], ["etch", "Etch"], ["deposition", "Deposition"], ["cmp", "CMP"], ["cleaning", "Cleaning"],
     ["oxidation", "Oxidation"], ["implant", "Implant"], ["metal", "Metal"], ["inspection", "Inspection"],
   ].map(([process_id, display_name]) => ({ process_id, display_name, status: "offline", data_source: "demo_profile" })),
   recent_alerts: [],
@@ -170,7 +170,7 @@ export default function FabOverview({ onNavigate }) {
       {equipment.length > 0 && (
         <Panel title={text("FAB 장비 / Unit 상태", "FAB Equipment / Unit Status")} icon="cpu" right={<span className="chip">{equipment.length} UNIT CONTEXTS</span>}>
           <div className="fab-equipment-grid">
-            {equipment.slice(0, 16).map((item, index) => (
+            {equipment.slice(0, CONNECTED_ORDER.length * 4).map((item, index) => (
               <button key={`${item.equipment_id}-${item.unit_id || index}`} type="button" className="focusable" onClick={() => onNavigate?.({ id: "process", processId: item.process_id || "etch", tab: "equipment", equipmentId: item.equipment_id, unitId: item.unit_id, recipeId: item.recipe_id })}>
                 <span className={`status-dot status-${statusTone(item.machine_state)}`} />
                 <div><strong className="mono">{item.equipment_id || "—"}</strong><small>{item.process_id || "process"} · {item.unit_id || "unit —"}</small></div>
@@ -192,7 +192,7 @@ export default function FabOverview({ onNavigate }) {
       )}
 
       <section className="panel fab-flow-card">
-        <div><span className="label-cap">{text("권장 조사 흐름", "Recommended Investigation Flow")}</span><strong>Photo → Etch → Deposition → CMP → Inspection → Candidate RCA</strong></div>
+        <div><span className="label-cap">{text("권장 조사 흐름", "Recommended Investigation Flow")}</span><strong>Photo → Etch → Deposition → CMP → Cleaning → Inspection → Candidate RCA</strong></div>
         <button type="button" className="btn btn-accent" onClick={() => onNavigate?.({ id: "process", processId: "etch", tab: "anomaly" })}><Icon name="activity" size={14} />{text("Etch 이상 확인", "Open Etch anomalies")}</button>
       </section>
     </div>

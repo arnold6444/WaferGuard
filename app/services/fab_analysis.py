@@ -117,8 +117,8 @@ def export_runtime_features(
     candidate; arbitrary local CSV files remain valid for EDA only.
     """
     normalized_process = str(process_id).strip().lower()
-    if normalized_process not in {"photo", "etch", "deposition", "cmp"}:
-        raise ValueError("process_id must be one of: photo, etch, deposition, cmp")
+    if normalized_process not in {"photo", "etch", "deposition", "cmp", "cleaning"}:
+        raise ValueError("process_id must be one of: photo, etch, deposition, cmp, cleaning")
     ensure_data_dirs()
     destination = Path(output_path or (DATA_INPUT_DIR / f"{normalized_process}_runtime_features.csv")).resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)

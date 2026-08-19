@@ -20,7 +20,7 @@ from app.services.process_temporal import (
 
 def test_profiles_cover_core_processes():
     config = load_config()
-    assert {"photo", "etch", "deposition", "cmp"}.issubset(config["profiles"])
+    assert {"photo", "etch", "deposition", "cmp", "cleaning"}.issubset(config["profiles"])
     for profile in config["profiles"].values():
         assert profile["timeseries"]["tags"]
         assert profile["timeseries"]["anomalies"]

@@ -6,7 +6,7 @@ clock:
   metrology_lag_seconds: 300
   inspection_lag_seconds: 600
 
-route: [photo, etch, deposition, cmp]
+route: [photo, etch, deposition, cmp, cleaning]
 
 lifecycle:
   supported_states: [IDLE, LOAD, STARTUP, RUNNING, HOLD, ALARM, UNLOAD, CLEANING, MAINTENANCE, SHUTDOWN]
@@ -345,3 +345,81 @@ processes:
       image_type: top_down_darkfield_grayscale_proxy
       sampling_level: process_run
     vision_related_tags: [slurry_flow, down_force, motor_current]
+
+  cleaning:
+    display_name: Cleaning
+    process_step: Cleaning
+    unit_type: cleaning_chamber
+    unit_class: single_wafer_wet_clean_chamber
+    equipment_class:
+      id: single_wafer_wet_clean_system
+      display_name: Single-wafer Wet Cleaning System
+      category: wafer_surface_cleaning
+      technology: chemical_clean_rinse_spin_dry
+    sensor_tags:
+      chemical_concentration_percent: {display_name: Active Chemical Concentration, unit: percent, sensor_type: inline_concentration_monitor, role: chemical_delivery}
+      bath_temperature: {display_name: Chemical Temperature, unit: degC, sensor_type: temperature_sensor, role: chemical_condition}
+      chemical_flow: {display_name: Chemical Flow, unit: mL/min, sensor_type: liquid_flow_meter, role: chemical_delivery}
+      di_water_resistivity: {display_name: DI Water Resistivity, unit: MOhm-cm, sensor_type: resistivity_monitor, role: rinse_water_quality}
+      spin_speed: {display_name: Wafer Spin Speed, unit: rpm, sensor_type: spindle_encoder, role: motion_control}
+      dryer_temperature: {display_name: Dryer Temperature, unit: degC, sensor_type: temperature_sensor, role: drying_control}
+      drain_particle_count: {display_name: Drain Particle Count, unit: count/mL, sensor_type: liquid_particle_monitor, role: removal_indicator}
+    samples_per_run: 64
+    maintenance_every_cycles: 10
+    degradation:
+      chemical_concentration_percent: -0.0015
+      di_water_resistivity: -0.010
+      drain_particle_count: 0.12
+    equipment:
+      - id: CLEAN-001
+        display_name: Single-wafer Cleaner 1
+        equipment_class_id: single_wafer_wet_clean_system
+        bias: {chemical_concentration_percent: -0.003, chemical_flow: -8.0}
+        units:
+          - {id: CH-A, display_name: Clean Chamber A, unit_class: single_wafer_wet_clean_chamber, bias: {chemical_flow: -10.0, spin_speed: -4.0}}
+          - {id: CH-B, display_name: Clean Chamber B, unit_class: single_wafer_wet_clean_chamber, bias: {chemical_flow: 10.0, spin_speed: 4.0}}
+      - id: CLEAN-002
+        display_name: Single-wafer Cleaner 2
+        equipment_class_id: single_wafer_wet_clean_system
+        bias: {chemical_concentration_percent: 0.003, chemical_flow: 8.0}
+        units:
+          - {id: CH-A, display_name: Clean Chamber A, unit_class: single_wafer_wet_clean_chamber, bias: {chemical_flow: -8.0, spin_speed: -3.0}}
+          - {id: CH-B, display_name: Clean Chamber B, unit_class: single_wafer_wet_clean_chamber, bias: {chemical_flow: 8.0, spin_speed: 3.0}}
+    recipes:
+      - {id: CLEAN_POST_CMP_A, display_name: Post-CMP Chemical Clean A, recipe_class: post_cmp_single_wafer_clean, offsets: {chemical_concentration_percent: 0.0, chemical_flow: 0.0}}
+      - {id: CLEAN_PRE_FILM_B, display_name: Pre-film Surface Clean B, recipe_class: pre_film_single_wafer_clean, offsets: {chemical_concentration_percent: 0.025, bath_temperature: 1.0}}
+    phases: [pre_rinse, chemical_clean, di_rinse, spin_dry]
+    relations:
+      - {kind: correlation, a: chemical_concentration_percent, b: chemical_flow, coefficient: 0.55}
+      - {kind: correlation, a: di_water_resistivity, b: drain_particle_count, coefficient: -0.50}
+      - {kind: correlation, a: spin_speed, b: dryer_temperature, coefficient: 0.35}
+    metrology:
+      added_particle_count:
+        display_name: Added Particle Count
+        unit: count/wafer
+        modality: darkfield_surface_scan
+        instrument_class: unpatterned_wafer_surface_inspector
+        method: pre_post_particle_adder_map
+        sampling_level: inline_sample
+        target: 8.0
+        tolerance: 6.0
+        noise_std: 0.40
+        drivers: {drain_particle_count: 1.8, di_water_resistivity: -1.0, chemical_flow: -0.6}
+      surface_metal_contamination_index:
+        display_name: Surface Metal Contamination Index
+        unit: proxy_index
+        modality: total_reflection_xray_fluorescence_proxy
+        instrument_class: surface_elemental_contamination_monitor
+        method: sampled_surface_contamination_screen
+        sampling_level: atline_sample
+        target: 1.0
+        tolerance: 0.6
+        noise_std: 0.05
+        drivers: {chemical_concentration_percent: -0.45, di_water_resistivity: -0.35, bath_temperature: 0.20}
+    inspection:
+      display_name: Post-clean Surface Inspection
+      inspection_modality: darkfield_optical_surface_inspection
+      instrument_class: unpatterned_wafer_surface_inspector
+      image_type: top_down_darkfield_grayscale_proxy
+      sampling_level: process_run
+    vision_related_tags: [drain_particle_count, di_water_resistivity, chemical_concentration_percent]

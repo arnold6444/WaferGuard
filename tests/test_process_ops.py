@@ -69,15 +69,20 @@ def _inspection(
     }
 
 
-def test_process_profiles_cover_eight_processes_and_mark_sources(process_env):
+def test_process_profiles_cover_nine_processes_and_mark_sources(process_env):
     profiles = process_ops.process_profiles()
 
     assert [profile["process_id"] for profile in profiles] == [
-        "oxidation", "photo", "etch", "deposition", "implant", "metal", "cmp", "inspection"
+        "oxidation", "photo", "etch", "deposition", "implant", "metal", "cmp", "cleaning",
+        "inspection"
     ]
     etch = next(profile for profile in profiles if profile["process_id"] == "etch")
     assert etch["connection"] == "runtime"
     assert {item["id"] for item in etch["parameters"]} >= {"source_rf_power", "resistance"}
+    cleaning = next(profile for profile in profiles if profile["process_id"] == "cleaning")
+    assert {item["id"] for item in cleaning["parameters"]} >= {
+        "chemical_concentration_percent", "di_water_resistivity", "drain_particle_count",
+    }
     assert all(profile["data_source"] != "fab_runtime" for profile in profiles)
 
 

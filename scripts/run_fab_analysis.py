@@ -52,7 +52,11 @@ def parser() -> argparse.ArgumentParser:
     )
     value.add_argument("--input", default=str(DEFAULT_INPUT_PATH), help="Local CSV or Parquet file")
     value.add_argument("--output-dir", default=str(FAB_ANALYSIS_OUTPUT_DIR))
-    value.add_argument("--process", choices=("photo", "etch", "deposition", "cmp"), default="cmp")
+    value.add_argument(
+        "--process",
+        choices=("photo", "etch", "deposition", "cmp", "cleaning"),
+        default="cmp",
+    )
     value.add_argument("--seed", type=int, default=42)
     value.add_argument("--export-runtime", action="store_true")
     value.add_argument("--run-experiment", action="store_true")

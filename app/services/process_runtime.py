@@ -1,6 +1,6 @@
 """Synthetic multi-process telemetry + vision anomaly runtime with real model artifacts.
 
-Photo/Etch/Deposition/CMP profiles share one experiment path:
+Photo/Etch/Deposition/CMP/Cleaning profiles share one experiment path:
 normal-only training -> candidate comparison -> artifact -> Production inference
 -> process_events -> existing Inspection/RCA evidence.
 
@@ -194,6 +194,7 @@ def _base_image(process_id: str, size: int, rng: np.random.Generator) -> np.ndar
     elif process_id == "etch": base += 0.025 * rr
     elif process_id == "deposition": base += 0.015 * np.cos(rr * math.pi)
     elif process_id == "cmp": base += 0.010 * np.sin((xx + yy) / 6)
+    elif process_id == "cleaning": base += 0.008 * np.cos(rr * math.pi * 5)
     image = np.zeros((size, size), dtype=float)
     image[mask] = np.clip(base[mask], 0.05, 0.95)
     return image
@@ -226,6 +227,9 @@ def _inject_defect(image: np.ndarray, defect: str, rng: np.random.Generator) -> 
         region = (rr < size*.30) & wafer; arr[region] = np.clip(arr[region] + 0.25, 0, 1)
     elif defect == "dishing": arr[(rr < size*.20) & wafer] *= 0.45
     elif defect == "erosion": arr[(rr > size*.26) & (rr < size*.38) & wafer] *= 0.55
+    elif defect == "watermark":
+        ring = (rr > size*.22) & (rr < size*.25) & wafer
+        arr[ring] = np.clip(arr[ring] + 0.28, 0, 1)
     else: raise KeyError(f"Unknown vision defect: {defect}")
     return np.clip(arr, 0, 1)
 

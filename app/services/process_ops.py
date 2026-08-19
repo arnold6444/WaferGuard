@@ -56,7 +56,7 @@ PROCESS_PROFILES: tuple[dict[str, Any], ...] = (
     {
         "process_id": "deposition",
         "display_name": "Deposition",
-        "equipment_type": "CVD / PVD",
+        "equipment_type": "CVD / PVD (Thin Film)",
         "connection": "not_connected",
         "data_source": "demo_profile",
         "parameters": [
@@ -93,7 +93,7 @@ PROCESS_PROFILES: tuple[dict[str, Any], ...] = (
     {
         "process_id": "cmp",
         "display_name": "CMP",
-        "equipment_type": "Polisher",
+        "equipment_type": "Polisher (C&C)",
         "connection": "not_connected",
         "data_source": "demo_profile",
         "parameters": [
@@ -101,6 +101,19 @@ PROCESS_PROFILES: tuple[dict[str, Any], ...] = (
             {"id": "platen_speed", "label": "Platen Speed", "unit": "rpm*", "normal_range": "Demo profile", "display_order": 2},
             {"id": "slurry_flow", "label": "Slurry Flow", "unit": "ml/min*", "normal_range": "Demo profile", "display_order": 3},
             {"id": "removal_rate", "label": "Removal Rate", "unit": "nm/min*", "normal_range": "Proxy metric", "display_order": 4},
+        ],
+    },
+    {
+        "process_id": "cleaning",
+        "display_name": "Cleaning",
+        "equipment_type": "Single-wafer Wet Cleaner (C&C)",
+        "connection": "not_connected",
+        "data_source": "demo_profile",
+        "parameters": [
+            {"id": "chemical_concentration_percent", "label": "Chemical Concentration", "unit": "%*", "normal_range": "Synthetic recipe context", "display_order": 1},
+            {"id": "chemical_flow", "label": "Chemical Flow", "unit": "mL/min*", "normal_range": "Synthetic recipe context", "display_order": 2},
+            {"id": "di_water_resistivity", "label": "DI Water Resistivity", "unit": "MΩ·cm*", "normal_range": "Synthetic water-quality proxy", "display_order": 3},
+            {"id": "drain_particle_count", "label": "Drain Particle Count", "unit": "count/mL*", "normal_range": "Synthetic removal indicator", "display_order": 4},
         ],
     },
     {
@@ -412,6 +425,7 @@ _DEMO_PROCESS_STATUS = {
     "implant": "normal",
     "metal": "warning",
     "cmp": "normal",
+    "cleaning": "normal",
 }
 
 

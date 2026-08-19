@@ -1,4 +1,4 @@
-"""Stateful synthetic time-series runtime for Photo, Deposition, and CMP.
+"""Stateful synthetic time-series runtime for Photo, Deposition, CMP, and Cleaning.
 
 Generic process telemetry is continuous rather than independent random rows:
 process phases, AR continuity, configured tag relationships, equipment bias,
@@ -22,7 +22,7 @@ from app.services import db
 from app.services import process_runtime as legacy
 
 TEMPORAL_GENERATOR_VERSION = "temporal-correlated-window-v2"
-TEMPORAL_PROCESSES = {"photo", "deposition", "cmp"}
+TEMPORAL_PROCESSES = {"photo", "deposition", "cmp", "cleaning"}
 DEFAULT_WINDOW_SIZE = 8
 
 

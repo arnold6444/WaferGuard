@@ -19,6 +19,7 @@ const STEP_BY_PROCESS = {
   photo: "Lithography",
   deposition: "Deposition",
   cmp: "CMP",
+  cleaning: "Cleaning",
 };
 
 const TAG_LABELS = {
@@ -38,6 +39,13 @@ const TAG_LABELS = {
   carrier_speed: { ko: "캐리어 속도", en: "Carrier Speed" },
   slurry_flow: { ko: "슬러리 유량", en: "Slurry Flow" },
   motor_current: { ko: "모터 전류", en: "Motor Current" },
+  chemical_concentration_percent: { ko: "화학액 농도", en: "Chemical Concentration" },
+  bath_temperature: { ko: "화학액 온도", en: "Chemical Temperature" },
+  chemical_flow: { ko: "화학액 유량", en: "Chemical Flow" },
+  di_water_resistivity: { ko: "DI Water 비저항", en: "DI Water Resistivity" },
+  spin_speed: { ko: "웨이퍼 회전 속도", en: "Wafer Spin Speed" },
+  dryer_temperature: { ko: "건조 온도", en: "Dryer Temperature" },
+  drain_particle_count: { ko: "배출액 파티클", en: "Drain Particle Count" },
 };
 
 function assetUrl(value) {
